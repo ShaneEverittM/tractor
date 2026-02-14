@@ -17,8 +17,6 @@ class Foo(Message["MyActor", float]):
 
 @final
 class MyActor(Actor):
-    messages = [Foo]
-
     def __init__(self, factor: float):
         super().__init__()
         self.factor = factor
