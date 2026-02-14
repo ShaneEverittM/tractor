@@ -1,35 +1,37 @@
 import asyncio
-from typing import final, override, Self
+from dataclasses import dataclass
+from typing import final, override
 
 from actor import Actor, Message
 
 
 @final
-class MyActor(Actor):
-    def __init__(self, factor: float):
-        super().__init__()
-        self.factor = factor
-        
-    @override
-    def accepts[R](self, message: type[Message[Self, R]]) -> bool:
-        return issubclass(message, Foo)
-
-
-@final
-class Foo(Message[MyActor, float]):
-    def __init__(self, bar: int):
-        self.bar = bar
+@dataclass
+class Foo(Message["MyActor", float]):
+    bar: int
 
     @override
     async def reply(self, actor: MyActor) -> float:
         return self.bar * actor.factor
 
 
+@final
+class MyActor(Actor):
+    messages = [Foo]
+
+    def __init__(self, factor: float):
+        super().__init__()
+        self.factor = factor
+
+
 async def main():
     foo = MyActor(2.5).ref()
+
     r = await foo.ask(Foo(1))
+    print(f"Asked MyActor {Foo(1)}, got {r}")
+
     await foo.tell(Foo(2))
-    print(r)
+    print(f"Told MyActor {Foo(2)}")
 
 
 if __name__ == "__main__":

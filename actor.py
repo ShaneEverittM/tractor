@@ -1,9 +1,15 @@
-"""A delightfully simple actor system."""
+"""
+A delightfully simple, mostly type-safe actor system.
+
+The current largest limitation of this library is the need
+for actors to expliclty declare, at runtime, the messages they accept.
+"""
 
 import asyncio
 from abc import ABC, abstractmethod
 from asyncio import Future, Queue
 from collections.abc import Awaitable, Generator
+from functools import cache
 from typing import Self, cast, final, override
 
 
@@ -17,26 +23,41 @@ class Message[A, R](ABC):
         ...
 
 
-class Actor(ABC):
+class Actor:
+    messages: list[type[Message[Self, object]]] = []
+
     def ref(self) -> ActorRef[Self]:
+        """Get an ActorRef for this actor."""
         return ActorRef(self)
 
-    @abstractmethod
+    def on_unknown_message(self, message: object) -> None:
+        """
+        Handle an unknown message.
+
+        The default behavior is to raise a TypeError.
+        """
+        raise TypeError(
+            f"Actor type {type(self).__name__} does not accept message type {type(message).__name__}"
+        )
+
+    @final
     def accepts[R](self, message: type[Message[Self, R]]) -> bool:
-        return False
+        return message in self.messages
 
 
 @final
 class Inbox[A: Actor](Queue[tuple[Message[A, object], Future[object] | None]]):
     def __init__(self, actor: A):
         super().__init__()
-        self.actor = actor
+        self._actor = actor
 
-    def _filter[R](self, message: Message[A, R]):
-        if not self.actor.accepts(type(message)):
-            raise TypeError(
-                f"Actor {self.actor} does not accept message {type(message)}"
-            )
+    @cache
+    def _filter_by_type[R](self, message: type[Message[A, R]]) -> bool:
+        return self._actor.accepts(message)
+
+    def _filter[R](self, message: Message[A, R]) -> None:
+        if not self._filter_by_type(type(message)):
+            self._actor.on_unknown_message(message)
 
     async def ask[R](
         self, message: Message[A, R], timeout: float | None = None
@@ -48,19 +69,19 @@ class Inbox[A: Actor](Queue[tuple[Message[A, object], Future[object] | None]]):
         await asyncio.wait_for(put, timeout)
         return cast(Future[R], reply)
 
-    def try_ask(self, message: Message[A, object]) -> Future[object] | None:
+    def try_ask[R](self, message: Message[A, R]) -> Future[R] | None:
         self._filter(message)
 
         reply = Future[object]()
         self.put_nowait((message, reply))
-        return reply
+        return cast(Future[R], reply)
 
-    async def tell(self, message: Message[A, object]) -> None:
+    async def tell[R](self, message: Message[A, R]) -> None:
         self._filter(message)
 
         await self.put((message, None))
 
-    def try_tell(self, message: Message[A, object]) -> None:
+    def try_tell[R](self, message: Message[A, R]) -> None:
         self._filter(message)
 
         self.put_nowait((message, None))
