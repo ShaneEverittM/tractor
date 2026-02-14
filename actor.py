@@ -2,7 +2,7 @@
 
 import asyncio
 from abc import ABC, abstractmethod
-from asyncio import Queue, Future
+from asyncio import Future, Queue
 from collections.abc import Awaitable, Generator
 from typing import Self, cast, final, override
 
@@ -23,8 +23,24 @@ class Actor(ABC):
 
 
 class Inbox[A: Actor](Queue[tuple[Message[A, object], Future[object] | None]]):
-    pass
+    async def ask(
+        self, message: Message[A, object], timeout: float | None = None
+    ) -> Future[object]:
+        reply = Future[object]()
+        put = self.put((message, reply))
+        await asyncio.wait_for(put, timeout)
+        return reply
 
+    def try_ask(self, message: Message[A, object]) -> Future[object] | None:
+        reply = Future[object]()
+        self.put_nowait((message, reply))
+        return reply
+
+    async def tell(self, message: Message[A, object]) -> None:
+        await self.put((message, None))
+        
+    def try_tell(self, message: Message[A, object]) -> None:
+        self.put_nowait((message, None))
 
 class Request[A: Actor, R]:
     def __init__(self, message: Message[A, R]) -> None:
@@ -56,16 +72,13 @@ class AskRequest[A: Actor, R](Awaitable[R], Request[A, R]):
         self._reply_timeout: float | None = None
 
     async def _enqueue(self) -> Future[R]:
-        reply = Future[object]()
         message = self._take_message()
-        put = self._inbox.put((message, reply))
-        await asyncio.wait_for(put, self._inbox_timeout)
+        reply = await self._inbox.ask(message, self._inbox_timeout)
         return cast(Future[R], reply)
 
-    def _try_enqueue(self):
-        reply = Future[object]()
+    def _try_enqueue(self) -> Future[R]:
         message = self._take_message()
-        self._inbox.put_nowait((message, reply))
+        reply = self._inbox.try_ask(message)
         return cast(Future[R], reply)
 
     async def enqueue(self) -> Self:
@@ -103,12 +116,11 @@ class TellRequest[A: Actor, R](Awaitable[None], Request[A, R]):
 
     async def send(self) -> None:
         message = self._take_message()
-        put = self._inbox.put((message, None))
-        await asyncio.wait_for(put, self._inbox_timeout)
+        await self._inbox.tell(message)
 
     def try_send(self) -> None:
         message = self._take_message()
-        self._inbox.put_nowait((message, None))
+        self._inbox.try_tell(message)
 
     @override
     def __await__(self) -> Generator[None, None, None]:
