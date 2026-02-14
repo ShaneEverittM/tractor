@@ -2,7 +2,7 @@
 
 import asyncio
 from abc import ABC, abstractmethod
-from asyncio import AbstractEventLoop, Queue, Future
+from asyncio import Queue, Future
 from collections.abc import Awaitable, Generator
 from typing import Self, cast, final, override
 
@@ -48,8 +48,6 @@ class AskRequest[A: Actor, R](Awaitable[R], Request[A, R]):
         self,
         inbox: Inbox[A],
         message: Message[A, R],
-        *,
-        loop: AbstractEventLoop | None = None,
     ) -> None:
         Request[A, R].__init__(self, message)
 
@@ -97,8 +95,6 @@ class TellRequest[A: Actor, R](Awaitable[None], Request[A, R]):
         self,
         inbox: Inbox[A],
         message: Message[A, R],
-        *,
-        loop: AbstractEventLoop | None = None,
     ) -> None:
         Request[A, R].__init__(self, message)
 
