@@ -9,6 +9,7 @@ source = { virtual = "." }
 
 [package.dev-dependencies]
 dev = [
+    { name = "actors" },
     { name = "basedpyright" },
     { name = "ruff" },
 ]
@@ -17,6 +18,7 @@ dev = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "actors" },
     { name = "basedpyright", specifier = ">=1.38.0" },
     { name = "ruff", specifier = ">=0.15.1" },
 ]

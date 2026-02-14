@@ -1,14 +1,20 @@
+"""A delightfully simple actor system."""
+
 import asyncio
 from abc import ABC, abstractmethod
-from asyncio import AbstractEventLoop, Future, Queue
-from collections.abc import Generator
+from asyncio import AbstractEventLoop, Queue, Future
+from collections.abc import Awaitable, Generator
 from typing import Self, cast, final, override
 
 
 @abstractmethod
-class Message[A, R](ABC):
+class Message[A: Actor, R](ABC):
+    """The base class for messages an Actor processes."""
+
     @abstractmethod
-    async def reply(self, actor: A) -> R: ...
+    async def reply(self, actor: A) -> R:
+        """Compute the reply for this message."""
+        ...
 
 
 class Actor(ABC):
@@ -16,28 +22,40 @@ class Actor(ABC):
         return ActorRef(self)
 
 
-@final
-class Reply[A, R](Future[R]):
-    def __init__(
-        self,
-        inbox: Queue[tuple[Message[A, object], Future[object]]],
-        message: Message[A, R],
-        *,
-        loop: AbstractEventLoop | None = None,
-    ) -> None:
-        super().__init__(loop=loop)
-        self._sent = False
+class Inbox[A: Actor](Queue[tuple[Message[A, object], Future[object] | None]]):
+    pass
+
+
+class Request[A: Actor, R]:
+    def __init__(self, message: Message[A, R]) -> None:
         self._message: Message[A, R] | None = message
-        self._inbox = inbox
-        self._reply: Future[R] | None = None
         self._inbox_timeout: float | None = None
-        self._reply_timeout: float | None = None
 
     def _take_message(self) -> Message[A, R]:
         assert self._message is not None, "Message taken twice!"
         message = self._message
         self._message = None
         return message
+
+    def with_inbox_timout(self, seconds: float) -> Self:
+        self._inbox_timeout = seconds
+        return self
+
+
+@final
+class AskRequest[A: Actor, R](Awaitable[R], Request[A, R]):
+    def __init__(
+        self,
+        inbox: Inbox[A],
+        message: Message[A, R],
+        *,
+        loop: AbstractEventLoop | None = None,
+    ) -> None:
+        Request[A, R].__init__(self, message)
+
+        self._inbox = inbox
+        self._reply: Future[R] | None = None
+        self._reply_timeout: float | None = None
 
     async def _enqueue(self) -> Future[R]:
         reply = Future[object]()
@@ -51,10 +69,6 @@ class Reply[A, R](Future[R]):
         message = self._take_message()
         self._inbox.put_nowait((message, reply))
         return cast(Future[R], reply)
-
-    def with_inbox_timout(self, seconds: float) -> Self:
-        self._inbox_timeout = seconds
-        return self
 
     async def enqueue(self) -> Self:
         self._reply = await self._enqueue()
@@ -78,16 +92,48 @@ class Reply[A, R](Future[R]):
 
 
 @final
+class TellRequest[A: Actor, R](Awaitable[None], Request[A, R]):
+    def __init__(
+        self,
+        inbox: Inbox[A],
+        message: Message[A, R],
+        *,
+        loop: AbstractEventLoop | None = None,
+    ) -> None:
+        Request[A, R].__init__(self, message)
+
+        self._message: Message[A, R] | None = message
+        self._inbox = inbox
+
+    async def send(self) -> None:
+        message = self._take_message()
+        put = self._inbox.put((message, None))
+        await asyncio.wait_for(put, self._inbox_timeout)
+
+    def try_send(self) -> None:
+        message = self._take_message()
+        self._inbox.put_nowait((message, None))
+
+    @override
+    def __await__(self) -> Generator[None, None, None]:
+        return self.send().__await__()
+
+
+@final
 class ActorRef[A: Actor]:
     def __init__(self, actor: A):
         self.actor = actor
-        self.inbox = Queue[tuple[Message[A, object], Future[object]]]()
+        self.inbox = Inbox[A]()
         self.task = asyncio.create_task(self.driver())
 
     async def driver(self):
         message, reply = await self.inbox.get()
         response = await message.reply(self.actor)
-        reply.set_result(response)
+        if reply:
+            reply.set_result(response)
 
-    def ask[R](self, message: Message[A, R]) -> Reply[A, R]:
-        return Reply(self.inbox, message)
+    def ask[R](self, message: Message[A, R]) -> AskRequest[A, R]:
+        return AskRequest(self.inbox, message)
+
+    def tell[R](self, message: Message[A, R]) -> TellRequest[A, R]:
+        return TellRequest(self.inbox, message)

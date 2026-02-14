@@ -1,7 +1,7 @@
 import asyncio
 from typing import final, override
 
-from actor import Message, Actor
+from actor import Actor, Message
 
 
 @final
@@ -24,6 +24,7 @@ class Foo(Message[MyActor, float]):
 async def main():
     foo = MyActor(2.5).ref()
     r = await foo.ask(Foo(1))
+    await foo.tell(Foo(2))
     print(r)
 
 
