@@ -1,5 +1,5 @@
 import asyncio
-from typing import final, override
+from typing import final, override, Self
 
 from actor import Actor, Message
 
@@ -9,6 +9,10 @@ class MyActor(Actor):
     def __init__(self, factor: float):
         super().__init__()
         self.factor = factor
+        
+    @override
+    def accepts[R](self, message: type[Message[Self, R]]) -> bool:
+        return issubclass(message, Foo)
 
 
 @final
