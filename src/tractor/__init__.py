@@ -2,8 +2,9 @@
 
 import asyncio
 from abc import ABC, abstractmethod
-from asyncio import Future, Queue
+from asyncio import CancelledError, Future, Queue
 from collections.abc import Awaitable, Generator
+from contextlib import suppress
 from typing import Generic, Self, TypeVar, cast, final, override
 
 
@@ -190,3 +191,9 @@ class ActorRef[A: Actor]:
 
     def tell[R](self, message: Message[A, R]) -> TellRequest[A, R]:
         return TellRequest(self.inbox, message)
+
+    def stop(self):
+        self.task.cancel()
+        with suppress(CancelledError):
+            await self.task
+        self.inbox.shutdown()
