@@ -4,11 +4,11 @@ import asyncio
 from abc import ABC, abstractmethod
 from asyncio import Future, Queue
 from collections.abc import Awaitable, Generator
-from typing import Self, cast, final, override
+from typing import Generic, Self, TypeVar, cast, final, override
 
 
 @abstractmethod
-class Message[A, R](ABC):
+class Message[A: Actor, R](ABC):
     """The base class for messages an Actor processes."""
 
     @abstractmethod
@@ -23,8 +23,46 @@ class Actor:
         return ActorRef(self)
 
 
+A = TypeVar("A", bound=Actor)
+R = TypeVar("R", covariant=True)
+
+
 @final
-class Inbox[A: Actor](Queue[tuple[Message[A, object], Future[object] | None]]):
+class Responder(Generic[A, R]):
+    """
+    A container for correlating a message with its response.
+
+    Due to variance rules, we have to manually create the generics for this type
+    in order to allow it to concretely bind the message with its reply R during
+    construction, but allow type erasue as a Responder[A, object] so that it can
+    be placed in the actor's inbox. Since the inbox driver calls Responder.respond,
+    we maintain the gaurantee that the produced response is of type R, even after
+    erasing R to object.
+
+    It also controlls the relationship between the message and the Future object,
+    so that replies always go to the right client.
+    """
+
+    def __init__(self, message: Message[A, R]):
+        self._message = message
+        self._reply: Future[R] | None = None
+
+    def tell(self) -> Self:
+        return self
+
+    def ask(self) -> tuple[Self, Future[R]]:
+        reply = Future[R]()
+        self._reply = reply
+        return self, reply
+
+    async def respond(self, actor: A) -> None:
+        response = await self._message.reply(actor)
+        if self._reply:
+            self._reply.set_result(response)
+
+
+@final
+class Inbox[A: Actor](Queue[Responder[A, object]]):
     def __init__(self, actor: A):
         super().__init__()
         self._actor = actor
@@ -32,21 +70,23 @@ class Inbox[A: Actor](Queue[tuple[Message[A, object], Future[object] | None]]):
     async def ask[R](
         self, message: Message[A, R], timeout: float | None = None
     ) -> Future[R]:
-        reply = Future[object]()
-        put = self.put((message, reply))
+        responder, handle = Responder(message).ask()
+        put = self.put(responder)
         await asyncio.wait_for(put, timeout)
-        return cast(Future[R], reply)
+        return handle
 
     def try_ask[R](self, message: Message[A, R]) -> Future[R] | None:
-        reply = Future[object]()
-        self.put_nowait((message, reply))
-        return cast(Future[R], reply)
+        responder, reply = Responder(message).ask()
+        self.put_nowait(responder)
+        return reply
 
     async def tell[R](self, message: Message[A, R]) -> None:
-        await self.put((message, None))
+        responder = Responder(message).tell()
+        await self.put(responder)
 
     def try_tell[R](self, message: Message[A, R]) -> None:
-        self.put_nowait((message, None))
+        responder = Responder(message).tell()
+        self.put_nowait(responder)
 
 
 class Request[A: Actor, R]:
@@ -142,10 +182,8 @@ class ActorRef[A: Actor]:
         self.task = asyncio.create_task(self.driver())
 
     async def driver(self):
-        message, reply = await self.inbox.get()
-        response = await message.reply(self.actor)
-        if reply:
-            reply.set_result(response)
+        responder = await self.inbox.get()
+        await responder.respond(self.actor)
 
     def ask[R](self, message: Message[A, R]) -> AskRequest[A, R]:
         return AskRequest(self.inbox, message)
