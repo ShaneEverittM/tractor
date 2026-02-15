@@ -1,7 +1,9 @@
 from dataclasses import dataclass
 from typing import final, override
 
-from tractor import Actor, Message
+from tractor.actor import Actor
+from tractor.message import Message
+from tractor.ref import ActorRef
 
 
 @final
@@ -22,6 +24,6 @@ class Multipliler(Actor):
 
 
 async def test_ask():
-    a = Multipliler(2.5).ref()
+    a = ActorRef(Multipliler(2.5))
     r = await a.ask(Foo(2))
     assert r == 5
