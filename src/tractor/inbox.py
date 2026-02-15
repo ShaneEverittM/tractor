@@ -62,3 +62,6 @@ class Inbox[A: Actor](Queue[Responder[A, object]]):
         """
         responder = Responder(message).tell()
         self.put_nowait(responder)
+
+
+__all__ = ["Inbox"]

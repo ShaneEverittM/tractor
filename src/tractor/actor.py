@@ -15,3 +15,6 @@ class Actor:
     async def on_stop(self):
         """Called when the actor is stopped."""
         pass
+
+
+__all__ = ["Actor"]

@@ -60,3 +60,6 @@ class ActorRef[A: Actor]:
         with suppress(CancelledError):
             await self._task
         self._inbox.shutdown()
+
+
+__all__ = ["ActorRef"]
