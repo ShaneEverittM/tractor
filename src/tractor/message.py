@@ -7,7 +7,7 @@ from tractor.actor import Actor
 
 @abstractmethod
 class Message[A: Actor, R](ABC):
-    """The base class for messages an Actor processes."""
+    """The base class for the messages an Actor processes."""
 
     @abstractmethod
     async def reply(self, actor: A) -> R:
