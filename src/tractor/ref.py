@@ -7,7 +7,7 @@ from typing import final
 
 from tractor.actor import Actor
 from tractor.inbox import Inbox
-from tractor.message import Message
+from tractor.message import Context, Message
 from tractor.request import AskRequest, TellRequest
 
 
@@ -26,8 +26,10 @@ class ActorRef[A: Actor]:
         self._task = asyncio.create_task(self._driver())
 
     async def _driver(self) -> None:
-        responder = await self._inbox.get()
-        await responder.respond(self._actor)
+        while True:
+            responder = await self._inbox.get()
+            ctx = Context(self)
+            await responder.respond(self._actor, ctx)
 
     def ask[R](self, message: Message[A, R]) -> AskRequest[A, R]:
         """

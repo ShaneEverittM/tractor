@@ -1,17 +1,6 @@
 from typing import override
 from tractor import Actor, ActorRef, Message
-
-
-class MessageForActorOne(Message["ActorOne", int]):
-    @override
-    async def reply(self, actor: ActorOne) -> int:
-        return 42
-
-
-class MessageForActorTwo(Message["ActorTwo", float]):
-    @override
-    async def reply(self, actor: ActorTwo) -> float:
-        return 3.14
+from tractor.message import Context
 
 
 class ActorOne(Actor):
@@ -20,6 +9,18 @@ class ActorOne(Actor):
 
 class ActorTwo(Actor):
     pass
+
+
+class MessageForActorOne(Message[ActorOne, int]):
+    @override
+    async def reply(self, actor: ActorOne, ctx: Context[ActorOne]) -> int:
+        return 42
+
+
+class MessageForActorTwo(Message[ActorTwo, float]):
+    @override
+    async def reply(self, actor: ActorTwo, ctx: Context[ActorTwo]) -> float:
+        return 3.14
 
 
 # Because we throw an error if a type ignore is unnecessary,
@@ -42,7 +43,14 @@ async def test_type_safety() -> None:
     await actor1.tell(MessageForActorTwo())  # pyright: ignore[reportArgumentType]
     await actor2.tell(MessageForActorOne())  # pyright: ignore[reportArgumentType]
 
+    # You should not be able to misuse Senders.
+    sender1 = MessageForActorOne.sender(actor1)
+    _ = sender1.send(MessageForActorTwo())  # pyright: ignore[reportArgumentType]
+
     # This isn't really a public API, but it's useful to make sure we don't code bugs.
     responder1, reply1 = MessageForActorOne().responder().ask()
-    await responder1.respond(ActorOne())
+    a1 = ActorOne()
+    ref = ActorRef(a1)
+    ctx = Context(ref)
+    await responder1.respond(a1, ctx)
     assert await reply1 == 42
