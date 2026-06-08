@@ -6,9 +6,10 @@ from contextlib import suppress
 from typing import final
 
 from tractor.actor import Actor
+from tractor.handles import InboxHandle, ResponderHandle
 from tractor.inbox import Inbox
 from tractor.message import Context, Message
-from tractor.request import AskRequest, TellRequest
+from tractor.request import Ask, Tell
 
 
 @final
@@ -30,34 +31,40 @@ class ActorRef[A: Actor]:
         self._task = asyncio.create_task(self._driver())
 
     async def _driver(self) -> None:
+        inbox = InboxHandle(self._recv)
         while True:
-            responder = await self._actor.step(self._inbox)
-            if responder is not None:
-                await responder.respond(self._actor, Context(self))
+            handle = await self._actor.step(inbox)
+            if handle is not None:
+                await handle.respond()
 
-    def ask[R](self, message: Message[A, R]) -> AskRequest[A, R]:
+    async def _recv(self) -> ResponderHandle:
+        """Receive the next message, bound to this actor and a fresh context."""
+        responder = await self._inbox.get()
+        return ResponderHandle(lambda: responder.respond(self._actor, Context(self)))
+
+    def ask[R](self, message: Message[A, R]) -> Ask[A, R]:
         """
         Ask this actor to process a message.
 
-        See the configuration methods on ``AskRequest`` to
+        See the configuration methods on ``Ask`` to
         control things like timeouts.
 
         :param message: the message to send
         :return: an ``Awaitable`` to configure transmission and retrieve the reply
         """
-        return AskRequest(self._inbox, message)
+        return Ask(self._inbox, message)
 
-    def tell[R](self, message: Message[A, R]) -> TellRequest[A, R]:
+    def tell[R](self, message: Message[A, R]) -> Tell[A, R]:
         """
         Tell this actor to process a message.
 
-        See the configuration methods on ``AskRequest`` to
+        See the configuration methods on ``Tell`` to
         control things like timeouts.
 
         :param message: the message to send
         :return: a ``Awaitable`` to configure transmission
         """
-        return TellRequest(self._inbox, message)
+        return Tell(self._inbox, message)
 
     async def stop(self) -> None:
         """Gracefully stop this actor."""

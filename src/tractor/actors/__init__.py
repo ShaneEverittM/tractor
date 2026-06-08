@@ -1,5 +1,5 @@
 """Ready-made actors solving common problems."""
 
-from tractor.actors.pool import WorkerPool, CreateTask, TryCreateTask, Reservation
+from tractor.actors.pool import WorkerPool, Submit, TrySubmit, Reservation
 
-__all__ = ["WorkerPool", "CreateTask", "TryCreateTask", "Reservation"]
+__all__ = ["WorkerPool", "Submit", "TrySubmit", "Reservation"]

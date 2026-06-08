@@ -2,7 +2,17 @@
 
 from tractor.actor import Actor
 from tractor.ref import ActorRef
+from tractor.handles import InboxHandle, ResponderHandle
 from tractor.message import Message, Responder
-from tractor.request import AskRequest, TellRequest
+from tractor.request import Ask, Tell
 
-__all__ = ["Actor", "ActorRef", "Message", "AskRequest", "TellRequest", "Responder"]
+__all__ = [
+    "Actor",
+    "ActorRef",
+    "Message",
+    "Ask",
+    "Tell",
+    "Responder",
+    "InboxHandle",
+    "ResponderHandle",
+]

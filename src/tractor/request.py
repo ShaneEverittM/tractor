@@ -36,7 +36,7 @@ class Request[A: Actor, R]:
 
 
 @final
-class AskRequest[A: Actor, R](Awaitable[R], Request[A, R]):
+class Ask[A: Actor, R](Awaitable[R], Request[A, R]):
     """A request that waits for a reply."""
 
     def __init__(
@@ -45,7 +45,7 @@ class AskRequest[A: Actor, R](Awaitable[R], Request[A, R]):
         message: Message[A, R],
     ) -> None:
         """
-        Construct a new ``AskRequest``.
+        Construct a new ``Ask``.
 
         :param inbox: the inbox in which to send the message
         :param message: what message to send
@@ -102,7 +102,7 @@ class AskRequest[A: Actor, R](Awaitable[R], Request[A, R]):
 
 
 @final
-class TellRequest[A: Actor, R](Awaitable[None], Request[A, R]):
+class Tell[A: Actor, R](Awaitable[None], Request[A, R]):
     """A request that does not wait for a reply."""
 
     def __init__(
@@ -111,7 +111,7 @@ class TellRequest[A: Actor, R](Awaitable[None], Request[A, R]):
         message: Message[A, R],
     ) -> None:
         """
-        Construct a new ``TellRequest``.
+        Construct a new ``Tell``.
 
         :param inbox: the inbox in which to send the message
         :param message: what message to send
@@ -144,4 +144,4 @@ class TellRequest[A: Actor, R](Awaitable[None], Request[A, R]):
         return self.send().__await__()
 
 
-__all__ = ["TellRequest", "AskRequest", "Request"]
+__all__ = ["Tell", "Ask", "Request"]

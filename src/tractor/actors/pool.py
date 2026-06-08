@@ -8,21 +8,21 @@ from dataclasses import dataclass
 from typing import override, final
 
 from tractor import Actor, Message
-from tractor.inbox import Inbox
-from tractor.message import Context, Responder, Sender
+from tractor.handles import InboxHandle, ResponderHandle
+from tractor.message import Context, Sender
 from tractor.select import select, Sel0, Sel1
 
 
 @final
 class Reservation(Awaitable[None]):
     """
-    A place in a :class:`WorkerPool`, returned by a ``CreateTask`` submission.
+    A place in a :class:`WorkerPool`, returned by a ``Submit`` submission.
 
     A reservation is *granted* the moment the pool has a free slot for your
     task, at which point the task begins running. Awaiting the reservation
     blocks until that moment::
 
-        reservation = await pool.ask(CreateTask(work, Done(), sender))
+        reservation = await pool.ask(Submit(work, Done(), sender))
         await reservation   # returns once your task has actually started
 
     Awaiting is how you apply back-pressure: in a submit loop, ``await`` each
@@ -62,20 +62,20 @@ class WorkerPool(Actor):
 
     Submit work with one of two messages:
 
-    * ``CreateTask`` — *back-pressure*, always accepted. Replies with a
+    * ``Submit`` — *back-pressure*, always accepted. Replies with a
       :class:`Reservation`; await it to block until your task actually starts.
       When the pool is full, queued submissions are granted slots strictly
       first-come-first-served as running tasks finish.
-    * ``TryCreateTask`` — *early reject*. Replies ``True`` if the task started
+    * ``TrySubmit`` — *early reject*. Replies ``True`` if the task started
       immediately, or ``False`` if it could not. It never waits and never
       queues.
 
-    ``CreateTask`` owns the fair waiter queue; ``TryCreateTask`` is the
-    non-queuing shortcut over the same capacity. Because a queued ``CreateTask``
-    sits ahead of any later submission, a ``TryCreateTask`` cannot jump the line
+    ``Submit`` owns the fair waiter queue; ``TrySubmit`` is the
+    non-queuing shortcut over the same capacity. Because a queued ``Submit``
+    sits ahead of any later submission, a ``TrySubmit`` cannot jump the line
     — it is rejected whenever anyone is already waiting.
 
-    The pool overrides :meth:`step` to wait on its mailbox *and* on its running
+    The pool overrides :meth:`step` to wait on its inbox *and* on its running
     tasks at once: when a task finishes it is reaped right there in the driver —
     its slot handed to the next waiter, its completion notification sent — with
     no self-sent message and no completion callback.
@@ -94,20 +94,12 @@ class WorkerPool(Actor):
         # Running task -> factory for the notification to send when it finishes.
         self.pool: dict[Task[None], Callable[[], Awaitable[None]]] = {}
 
-    # ``step`` is only ever invoked by the driver with this actor's own
-    # ``Inbox[WorkerPool]`` (see ``ActorRef._driver``), so specializing the inbox
-    # and reply to ``WorkerPool`` here is sound. The checker cannot prove it:
-    # ``Inbox`` and ``Responder`` are invariant in the actor type and ``Self``
-    # sits in a contravariant position, so it widens the base's ``Self`` to
-    # ``Actor`` and rejects the narrower override.
     @override
-    async def step(  # pyright: ignore[reportIncompatibleMethodOverride]
-        self, inbox: Inbox[WorkerPool]
-    ) -> Responder[WorkerPool, object] | None:
-        """Wait on the mailbox and on task completions simultaneously."""
-        match await select(inbox.get(), self._next_finished()):
-            case Sel0(responder):
-                return responder
+    async def step(self, inbox: InboxHandle) -> ResponderHandle | None:
+        """Wait on the inbox and on task completions simultaneously."""
+        match await select(inbox.recv(), self._next_finished()):
+            case Sel0(handle):
+                return handle
             case Sel1(finished):
                 await self._complete(finished)
                 return None
@@ -117,10 +109,10 @@ class WorkerPool(Actor):
         Resolve to a running task as soon as one of them finishes.
 
         While the pool is idle this never resolves, so ``step`` waits only on the
-        mailbox until there is work to watch.
+        inbox until there is work to watch.
         """
         if not self.pool:
-            _ = await asyncio.Event().wait()  # never set: only the mailbox matters
+            _ = await asyncio.Event().wait()  # never set: only the inbox matters
         done, _ = await asyncio.wait(self.pool.keys(), return_when=FIRST_COMPLETED)
         return next(iter(done))
 
@@ -237,7 +229,7 @@ class _Submission[M]:
 
 
 @final
-class CreateTask[M](_Submission[M], Message[WorkerPool, Reservation]):
+class Submit[M](_Submission[M], Message[WorkerPool, Reservation]):
     """
     Submit work to a :class:`WorkerPool` with back-pressure; always accepted.
 
@@ -254,7 +246,7 @@ class CreateTask[M](_Submission[M], Message[WorkerPool, Reservation]):
 
 
 @final
-class TryCreateTask[M](_Submission[M], Message[WorkerPool, bool]):
+class TrySubmit[M](_Submission[M], Message[WorkerPool, bool]):
     """
     Submit work to a :class:`WorkerPool` only if a slot is free now; else reject.
 
@@ -267,4 +259,4 @@ class TryCreateTask[M](_Submission[M], Message[WorkerPool, bool]):
         return actor.try_submit(self._task, self._notify)
 
 
-__all__ = ["WorkerPool", "CreateTask", "TryCreateTask", "Reservation"]
+__all__ = ["WorkerPool", "Submit", "TrySubmit", "Reservation"]

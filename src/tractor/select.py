@@ -16,7 +16,7 @@ turn, the lowest-indexed one wins. The awaitables that did not win are cancelled
 so pass sources you can cheaply recreate next call — a fresh ``queue.get()``, a
 re-polled stream — exactly as you would reconstruct branches on each iteration of
 a ``tokio::select!`` loop. (Put your highest-priority, must-not-drop source, such
-as an actor's mailbox, in position 0 so a tie never discards it.)
+as an actor's inbox, in position 0 so a tie never discards it.)
 
 The winning awaitable's result is returned; if it raised, ``select`` re-raises.
 """
