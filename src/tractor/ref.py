@@ -15,21 +15,25 @@ from tractor.request import AskRequest, TellRequest
 class ActorRef[A: Actor]:
     """A handle to an actor of type ``A``."""
 
-    def __init__(self, actor: A):
+    def __init__(self, actor: A, *, capacity: int | None = None):
         """
         Wrap an actor in an ``ActorRef`` object.
 
         :param actor: the actor to wrap
+        :param capacity: the most messages that may wait unprocessed in the
+            inbox before senders must wait — or, for the ``try_*`` send
+            variants, be rejected with ``asyncio.QueueFull``. ``None`` (the
+            default) leaves the inbox unbounded.
         """
         self._actor = actor
-        self._inbox = Inbox[A]()
+        self._inbox = Inbox[A](capacity)
         self._task = asyncio.create_task(self._driver())
 
     async def _driver(self) -> None:
         while True:
-            responder = await self._inbox.get()
-            ctx = Context(self)
-            await responder.respond(self._actor, ctx)
+            responder = await self._actor.step(self._inbox)
+            if responder is not None:
+                await responder.respond(self._actor, Context(self))
 
     def ask[R](self, message: Message[A, R]) -> AskRequest[A, R]:
         """

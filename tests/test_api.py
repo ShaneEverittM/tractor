@@ -12,6 +12,9 @@ class Counter(Actor):
         super().__init__()
         self.value: int = 0
 
+    async def increment(self, by: int) -> None:
+        self.value += by
+
 
 @final
 @dataclass
@@ -19,8 +22,8 @@ class Increment(Message[Counter, None]):
     by: int
 
     @override
-    async def reply(self, actor: Counter, ctx: Context[Counter]):
-        actor.value += self.by
+    async def dispatch(self, actor: Counter, ctx: Context[Counter]) -> None:
+        await actor.increment(self.by)
 
 
 async def test_ask():

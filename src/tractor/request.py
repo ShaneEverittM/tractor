@@ -119,7 +119,6 @@ class TellRequest[A: Actor, R](Awaitable[None], Request[A, R]):
 
         super().__init__(message)
 
-        self._message: Message[A, R] | None = message
         self._inbox = inbox
 
     async def send(self) -> None:

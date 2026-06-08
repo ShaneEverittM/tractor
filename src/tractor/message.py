@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from asyncio import Future
+from collections.abc import Awaitable, Callable
 from typing import Generic, Self, TypeVar, final, TYPE_CHECKING
 
 from tractor.actor import Actor
@@ -8,23 +9,27 @@ if TYPE_CHECKING:
     from tractor.ref import ActorRef
 
 
-# TODO: Make this a protocol, and make the type inside the sender
-#       method so users can't make it.
+# TODO: Make this a Protocol so it can't be constructed directly; it should
+#       only ever come from Message.sender.
 
 
 @final
 class Sender[M, R]:
-    def __init__[A: Actor](self, actor: ActorRef[A]):
-        self.actor = actor
+    """
+    A handle that sends exactly one message type ``M`` and yields its reply ``R``.
+
+    It is built by ``Message.sender`` from an ``ActorRef[A]``, capturing that
+    ref's bound ``ask`` while the ``M``/``A``/``R`` relationship is still known.
+    Storing the closure rather than the ref lets ``send`` stay fully type-safe:
+    the actor type ``A`` does not need to leak into ``Sender``'s parameters, yet
+    no unsound cast is required.
+    """
+
+    def __init__(self, send: Callable[[M], Awaitable[R]]):
+        self._send = send
 
     async def send(self, message: M) -> R:
-        # SAFETY: We know we only construct this from Message.sender,
-        # which guarantees we create an object whose generic M is inferred
-        # from said message. With that in mind, callers of Sender.send will
-        # get a type error if they don't send that specific message.
-        # Furthermore, since we took in an ActorRef[A] that was the same
-        # generic A that the message targeted, we know this actor accepts this message.
-        return await self.actor.ask(message)  # pyright: ignore[reportUnknownVariableType, reportArgumentType]
+        return await self._send(message)
 
 
 @final
@@ -37,18 +42,30 @@ class Context[A: Actor]:
         return self._actor
 
 
-@abstractmethod
 class Message[A: Actor, R](ABC):
-    """The base class for the messages an Actor processes."""
+    """
+    The base class for the messages an ``Actor`` processes.
+
+    A ``Message`` is a typed envelope: it names the actor type ``A`` it targets
+    and the reply type ``R`` it produces. Its ``dispatch`` method should hold
+    only routing — delegating to a method on ``A`` that owns the behavior and
+    state — rather than the business logic itself.
+    """
 
     @abstractmethod
-    async def reply(self, actor: A, ctx: Context[A]) -> R:
-        """Compute the reply for this message."""
+    async def dispatch(self, actor: A, ctx: Context[A]) -> R:
+        """
+        Route this message to its handler on ``actor`` and return the reply.
+
+        Keep this thin: call a method on ``actor`` that does the real work. The
+        result is checked against ``R``, so a handler whose return type doesn't
+        match the message's declared reply type is a type error right here.
+        """
         ...
 
     @classmethod
     def sender(cls, actor: ActorRef[A]) -> Sender[Self, R]:
-        return Sender(actor)
+        return Sender(actor.ask)
 
     def responder(self) -> Responder[A, R]:
         """Get the responder for this message."""
@@ -104,10 +121,10 @@ class Responder(Generic[A, R]):
         """
         Respond to this message.
 
-        :param actor: the actor whose state should be passed to ``Message.reply``
+        :param actor: the actor whose state should be passed to ``Message.dispatch``
         :param ctx: the context
         """
-        response = await self._message.reply(actor, ctx)
+        response = await self._message.dispatch(actor, ctx)
         if self._reply:
             self._reply.set_result(response)
 

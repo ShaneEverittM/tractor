@@ -17,6 +17,16 @@ class Inbox[A: Actor](Queue[Responder[A, object]]):
     that enqueue and create replies atomically.
     """
 
+    def __init__(self, capacity: int | None = None):
+        """
+        Create an inbox.
+
+        :param capacity: the most messages that may wait unprocessed before
+            senders block (or, for the ``try_*`` variants, are rejected with
+            ``asyncio.QueueFull``); ``None`` leaves the inbox unbounded
+        """
+        super().__init__(maxsize=capacity if capacity is not None else 0)
+
     async def ask[R](
         self, message: Message[A, R], timeout: float | None = None
     ) -> Future[R]:
