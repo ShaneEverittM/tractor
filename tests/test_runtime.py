@@ -4,7 +4,7 @@ from typing import final, override
 
 import pytest
 
-from tractor import Actor, ActorRef, ActorStoppedError, ControlFlow, CrashPolicy, Message, Runtime
+from tractor import Actor, ActorRef, ActorStoppedError, ControlFlow, Message, Runtime
 from tractor.message import Context
 
 
@@ -99,7 +99,7 @@ async def test_on_start_called():
 
     ref = ActorRef(StartWatcher())
     async with asyncio.timeout(1):
-        await started.wait()
+        _ = await started.wait()
     await ref.stop()
 
 
@@ -116,7 +116,7 @@ async def test_on_stop_called_after_crash():
     ref.tell(Boom()).try_send()
     # Wait for the driver task to finish after the panic
     async with asyncio.timeout(1):
-        await ref._task
+        await ref._task  # pyright: ignore[reportPrivateUsage]
     assert actor.stopped
 
 
@@ -140,13 +140,13 @@ async def test_stop_resolves_pending_ask_with_stopped_error():
 
         @override
         async def on_start(self):
-            await self._gate.wait()  # blocks forever
+            _ = await self._gate.wait()  # blocks forever
 
     actor = Blocker()
     ref = ActorRef(actor)
 
     # Enqueue an ask before the actor ever starts
-    ask = ref.ask(EchoMsg(1))  # type: ignore[arg-type]  # wrong actor, just for the future
+    ask = ref.ask(EchoMsg(1))  # pyright: ignore[reportArgumentType]  # wrong actor, just for the future
     enqueued = asyncio.ensure_future(ask.enqueue())
 
     # Give the event loop a turn so the enqueue attempt can block on inbox
@@ -193,7 +193,7 @@ async def test_crash_policy_called():
         await ref.ask(Boom())
 
     async with asyncio.timeout(1):
-        await ref._task
+        await ref._task  # pyright: ignore[reportPrivateUsage]
 
     assert len(calls) == 1
     _, exc, flow = calls[0]
@@ -222,7 +222,7 @@ async def test_context_tell():
     @final
     class Sender(Actor):
         def __init__(self, target: ActorRef[Receiver]):
-            self._target = target
+            self.target = target
 
     @final
     @dataclass
@@ -231,7 +231,7 @@ async def test_context_tell():
 
         @override
         async def dispatch(self, actor: Sender, ctx: Context[Sender]) -> None:
-            await ctx.tell(actor._target, Receive(self.value))
+            await ctx.tell(actor.target, Receive(self.value))
 
     runtime = Runtime()
     receiver_ref = runtime.spawn(Receiver())
@@ -267,7 +267,7 @@ async def test_context_ask():
     @final
     class Delegator(Actor):
         def __init__(self, adder: ActorRef[Adder]):
-            self._adder = adder
+            self.adder = adder
 
     @final
     @dataclass
@@ -277,7 +277,7 @@ async def test_context_ask():
 
         @override
         async def dispatch(self, actor: Delegator, ctx: Context[Delegator]) -> int:
-            return await ctx.ask(actor._adder, Add(self.a, self.b))
+            return await ctx.ask(actor.adder, Add(self.a, self.b))
 
     runtime = Runtime()
     adder_ref = runtime.spawn(Adder())
