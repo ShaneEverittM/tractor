@@ -3,7 +3,7 @@ from typing import override, final
 
 import pytest
 
-from tractor import Actor, ActorRef, Message
+from tractor import Actor, Message, Runtime
 from tractor.message import Context
 
 
@@ -24,19 +24,20 @@ class Block(Message[Blocker, None]):
 async def test_bounded_inbox_rejects_when_full():
     started = Event()
     gate = Event()
-    a = ActorRef(Blocker(started, gate), capacity=1)
+    runtime = Runtime()
+    a = runtime.spawn(Blocker(started, gate), capacity=1)
 
     # The driver takes the first message and parks in its handler.
-    a.tell(Block()).try_send()
+    runtime.try_tell(a, Block())
     async with timeout(1):
         _ = await started.wait()  # confirmed in-flight; the inbox is empty again
 
     # One more fills the single inbox slot...
-    a.tell(Block()).try_send()
+    runtime.try_tell(a, Block())
 
     # ...so the next try-send is rejected rather than silently queued.
     with pytest.raises(QueueFull):
-        a.tell(Block()).try_send()
+        runtime.try_tell(a, Block())
 
     gate.set()  # let it drain
     await a.stop()
@@ -45,15 +46,16 @@ async def test_bounded_inbox_rejects_when_full():
 async def test_unbounded_inbox_never_rejects():
     started = Event()
     gate = Event()
-    a = ActorRef(Blocker(started, gate))  # default: unbounded
+    runtime = Runtime()
+    a = runtime.spawn(Blocker(started, gate))  # default: unbounded
 
-    a.tell(Block()).try_send()
+    runtime.try_tell(a, Block())
     async with timeout(1):
         _ = await started.wait()
 
     # Far more than any small bound would allow; none are rejected.
     for _ in range(100):
-        a.tell(Block()).try_send()
+        runtime.try_tell(a, Block())
 
     gate.set()
     await a.stop()

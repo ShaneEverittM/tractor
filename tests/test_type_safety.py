@@ -1,5 +1,5 @@
 from typing import override
-from tractor import Actor, ActorRef, Message
+from tractor import Actor, ActorRef, Message, Runtime
 from tractor.message import Context
 
 
@@ -28,23 +28,24 @@ class MessageForActorTwo(Message[ActorTwo, float]):
 # if the _don't_ fire. This test doesn't actually need to do
 # anything at runtime.
 async def test_type_safety() -> None:
-    actor1 = ActorRef(ActorOne())
-    actor2 = ActorRef(ActorTwo())
+    runtime = Runtime()
+    actor1 = runtime.spawn(ActorOne())
+    actor2 = runtime.spawn(ActorTwo())
 
     # Using ask should propagate the message's return type.
-    r1: int = await actor1.ask(MessageForActorOne())
-    r2: float = await actor2.ask(MessageForActorTwo())
+    r1: int = await runtime.ask(actor1, MessageForActorOne())
+    r2: float = await runtime.ask(actor2, MessageForActorTwo())
 
     # And obviously it should work.
     assert r1 == 42
     assert r2 == 3.14
 
     # You should not be able to send a message to the wrong actor.
-    await actor1.tell(MessageForActorTwo())  # pyright: ignore[reportArgumentType]
-    await actor2.tell(MessageForActorOne())  # pyright: ignore[reportArgumentType]
+    await runtime.tell(actor1, MessageForActorTwo())  # pyright: ignore[reportArgumentType]
+    await runtime.tell(actor2, MessageForActorOne())  # pyright: ignore[reportArgumentType]
 
     # You should not be able to misuse Senders.
-    sender1 = MessageForActorOne.sender(actor1)
+    sender1 = MessageForActorOne.sender(runtime, actor1)
     misuse = sender1.send(MessageForActorTwo())  # pyright: ignore[reportArgumentType]
     misuse.close()  # only constructed to assert the type error above; don't leak it
 
@@ -55,3 +56,6 @@ async def test_type_safety() -> None:
     ctx = Context(ref)
     await responder1.respond(a1, ctx)
     assert await reply1 == 42
+
+    await actor1.stop()
+    await actor2.stop()

@@ -12,7 +12,6 @@ from tractor.control_flow import ControlFlow
 from tractor.handles import InboxHandle, ResponderHandle
 from tractor.inbox import Inbox
 from tractor.message import Context, Message
-from tractor.request import Ask, Tell
 
 _default_runtime: _RuntimeLike | None = None
 
@@ -45,7 +44,14 @@ class _RuntimeLike(Protocol):
 
 @final
 class ActorRef[A: Actor]:
-    """A handle to an actor of type ``A``."""
+    """
+    An opaque address for an actor of type ``A``.
+
+    Use ``Runtime.ask`` / ``Runtime.tell`` to send messages from outside an actor.
+    Use ``ctx.ask`` / ``ctx.tell`` from inside a ``Message.dispatch`` handler.
+    ``ActorRef`` intentionally has no ``ask``/``tell`` methods so that every send
+    is observable at the runtime level.
+    """
 
     def __init__(
         self,
@@ -55,7 +61,7 @@ class ActorRef[A: Actor]:
         runtime: _RuntimeLike | None = None,
     ):
         """
-        Wrap an actor in an ``ActorRef`` object.
+        Wrap an actor in an ``ActorRef``.
 
         Prefer ``Runtime.spawn()`` over constructing this directly — it ensures
         the actor is registered with a runtime and its sends are observable.
@@ -119,24 +125,6 @@ class ActorRef[A: Actor]:
         """Receive the next message, bound to this actor and a fresh context."""
         responder = await self._inbox.get()
         return ResponderHandle(lambda: responder.respond(self._actor, Context(self)))
-
-    def ask[R](self, message: Message[A, R]) -> Ask[A, R]:
-        """
-        Ask this actor to process a message.
-
-        :param message: the message to send
-        :return: an ``Awaitable`` to configure transmission and retrieve the reply
-        """
-        return Ask(self._inbox, message)
-
-    def tell[R](self, message: Message[A, R]) -> Tell[A, R]:
-        """
-        Tell this actor to process a message.
-
-        :param message: the message to send
-        :return: an ``Awaitable`` to configure transmission
-        """
-        return Tell(self._inbox, message)
 
     async def stop(self) -> None:
         """Gracefully stop this actor."""

@@ -74,7 +74,7 @@ class Ping(Message[Crasher, str]):
 async def test_runtime_spawn():
     runtime = Runtime()
     ref = runtime.spawn(Echo())
-    result = await ref.ask(EchoMsg(42))
+    result = await runtime.ask(ref, EchoMsg(42))
     assert result == 42
     await ref.stop()
 
@@ -112,8 +112,9 @@ async def test_on_stop_called_after_stop():
 
 async def test_on_stop_called_after_crash():
     actor = Crasher(flow=ControlFlow.Stop)
-    ref = ActorRef(actor)
-    ref.tell(Boom()).try_send()
+    runtime = Runtime()
+    ref = runtime.spawn(actor)
+    runtime.try_tell(ref, Boom())
     # Wait for the driver task to finish after the panic
     async with asyncio.timeout(1):
         await ref._task  # pyright: ignore[reportPrivateUsage]
@@ -122,9 +123,10 @@ async def test_on_stop_called_after_crash():
 
 async def test_dispatch_exception_resolves_future():
     actor = Crasher(flow=ControlFlow.Stop)
-    ref = ActorRef(actor)
+    runtime = Runtime()
+    ref = runtime.spawn(actor)
     with pytest.raises(ValueError, match="boom"):
-        await ref.ask(Boom())
+        await runtime.ask(ref, Boom())
     await ref.stop()
 
 
@@ -142,37 +144,37 @@ async def test_stop_resolves_pending_ask_with_stopped_error():
         async def on_start(self):
             _ = await self._gate.wait()  # blocks forever
 
-    actor = Blocker()
-    ref = ActorRef(actor)
+    runtime = Runtime()
+    ref = runtime.spawn(Blocker())
 
-    # Enqueue an ask before the actor ever starts
-    ask = ref.ask(EchoMsg(1))  # pyright: ignore[reportArgumentType]  # wrong actor, just for the future
-    enqueued = asyncio.ensure_future(ask.enqueue())
+    # Enqueue an ask before the actor ever starts processing messages
+    pending = asyncio.ensure_future(
+        runtime.ask(ref, EchoMsg(1))  # pyright: ignore[reportArgumentType]
+    )
 
-    # Give the event loop a turn so the enqueue attempt can block on inbox
+    # Give the event loop a turn so the enqueue attempt can proceed
     await asyncio.sleep(0)
 
     # Stop the actor — should drain the inbox and resolve the future with ActorStoppedError
     await ref.stop()
 
     with pytest.raises(ActorStoppedError):
-        await enqueued
-        reply = ask.try_ask()
-        await reply
+        await pending
 
 
 async def test_on_panic_continue_keeps_running():
     actor = Crasher(flow=ControlFlow.Continue)
-    ref = ActorRef(actor)
+    runtime = Runtime()
+    ref = runtime.spawn(actor)
 
     # First: send a crash — actor should survive
     with pytest.raises(ValueError, match="boom"):
-        await ref.ask(Boom())
+        await runtime.ask(ref, Boom())
 
     assert actor.panics == 1
 
     # Second: actor still responds
-    result = await ref.ask(Ping())
+    result = await runtime.ask(ref, Ping())
     assert result == "pong"
 
     await ref.stop()
@@ -190,7 +192,7 @@ async def test_crash_policy_called():
     ref = runtime.spawn(actor)
 
     with pytest.raises(ValueError):
-        await ref.ask(Boom())
+        await runtime.ask(ref, Boom())
 
     async with asyncio.timeout(1):
         await ref._task  # pyright: ignore[reportPrivateUsage]
@@ -237,7 +239,7 @@ async def test_context_tell():
     receiver_ref = runtime.spawn(Receiver())
     sender_ref = runtime.spawn(Sender(receiver_ref))
 
-    await sender_ref.tell(Forward(99))
+    await runtime.tell(sender_ref, Forward(99))
 
     async with asyncio.timeout(1):
         assert await result == 99
@@ -283,7 +285,7 @@ async def test_context_ask():
     adder_ref = runtime.spawn(Adder())
     delegator_ref = runtime.spawn(Delegator(adder_ref))
 
-    result = await delegator_ref.ask(DelegateAdd(3, 4))
+    result = await runtime.ask(delegator_ref, DelegateAdd(3, 4))
     assert result == 7
 
     await delegator_ref.stop()
@@ -292,7 +294,10 @@ async def test_context_ask():
 
 async def test_default_runtime_backward_compat():
     """ActorRef(actor) without a runtime argument still works."""
+    from tractor.ref import _get_default_runtime  # pyright: ignore[reportPrivateUsage]
+
     ref = ActorRef(Echo())
-    result = await ref.ask(EchoMsg(5))
+    runtime = _get_default_runtime()
+    result = await runtime.ask(ref, EchoMsg(5))
     assert result == 5
     await ref.stop()

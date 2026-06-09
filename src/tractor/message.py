@@ -6,7 +6,7 @@ from typing import Generic, Self, TypeVar, final, TYPE_CHECKING
 from tractor.actor import Actor
 
 if TYPE_CHECKING:
-    from tractor.ref import ActorRef
+    from tractor.ref import ActorRef, _RuntimeLike  # pyright: ignore[reportPrivateUsage]
 
 
 # TODO: Make this a Protocol so it can't be constructed directly; it should
@@ -18,11 +18,11 @@ class Sender[M, R]:
     """
     A handle that sends exactly one message type ``M`` and yields its reply ``R``.
 
-    It is built by ``Message.sender`` from an ``ActorRef[A]``, capturing that
-    ref's bound ``ask`` while the ``M``/``A``/``R`` relationship is still known.
-    Storing the closure rather than the ref lets ``send`` stay fully type-safe:
-    the actor type ``A`` does not need to leak into ``Sender``'s parameters, yet
-    no unsound cast is required.
+    Built by ``Message.sender`` from a ``Runtime`` and an ``ActorRef[A]``,
+    capturing a closure over ``runtime.ask`` while the ``M``/``A``/``R``
+    relationship is still known. Storing the closure rather than the ref lets
+    ``send`` stay fully type-safe: the actor type ``A`` does not need to leak
+    into ``Sender``'s parameters, yet no unsound cast is required.
     """
 
     def __init__(self, send: Callable[[M], Awaitable[R]]):
@@ -76,8 +76,8 @@ class Message[A: Actor, R](ABC):
         ...
 
     @classmethod
-    def sender(cls, actor: ActorRef[A]) -> Sender[Self, R]:
-        return Sender(actor.ask)
+    def sender(cls, runtime: _RuntimeLike, ref: ActorRef[A]) -> Sender[Self, R]:
+        return Sender(lambda msg: runtime.ask(ref, msg))
 
     def responder(self) -> Responder[A, R]:
         """Get the responder for this message."""

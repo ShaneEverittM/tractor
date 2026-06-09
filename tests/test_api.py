@@ -2,7 +2,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import final, override
 
-from tractor import Actor, Message, ActorRef
+from tractor import Actor, Message, Runtime
 from tractor.message import Context
 
 
@@ -28,7 +28,8 @@ class Increment(Message[Counter, None]):
 
 async def test_ask():
     m = Counter()
-    a = ActorRef(m)
-    a.tell(Increment(3)).try_send()
+    runtime = Runtime()
+    a = runtime.spawn(m)
+    runtime.try_tell(a, Increment(3))
     await asyncio.sleep(1)
     assert m.value == 3

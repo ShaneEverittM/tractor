@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from asyncio import Future
 from typing import TYPE_CHECKING
 
 from tractor.control_flow import ControlFlow, CrashPolicy, LogCrashPolicy
@@ -22,8 +23,8 @@ class Runtime:
         ref = runtime.spawn(MyActor())
         await runtime.ask(ref, MyMessage())
 
-    The runtime is also accessible from inside message handlers via
-    ``ctx.ref._runtime``, and through ``ctx.tell`` / ``ctx.ask``.
+    Inside message handlers, use ``ctx.ask`` / ``ctx.tell`` which forward here,
+    carrying sender identity for future tracing.
 
     :param crash_policy: observer called after every actor panic (after the
         actor's own ``on_panic`` has already made its ``ControlFlow`` decision).
@@ -44,7 +45,7 @@ class Runtime:
 
         :param actor: the actor instance to wrap and start
         :param capacity: inbox capacity (``None`` for unbounded)
-        :return: an ``ActorRef`` through which messages can be sent
+        :return: an ``ActorRef`` through which messages can be addressed
         """
         from tractor.ref import ActorRef  # deferred: breaks ref ↔ runtime cycle
 
@@ -56,7 +57,8 @@ class Runtime:
         message: Message[A, R],
     ) -> R:
         """Send ``message`` to ``ref`` and wait for the reply."""
-        return await ref.ask(message)
+        future = await ref._inbox.ask(message)  # pyright: ignore[reportPrivateUsage]
+        return await future
 
     async def tell[A: Actor, R](
         self,
@@ -64,7 +66,36 @@ class Runtime:
         message: Message[A, R],
     ) -> None:
         """Send ``message`` to ``ref`` without waiting for a reply."""
-        await ref.tell(message)
+        await ref._inbox.tell(message)  # pyright: ignore[reportPrivateUsage]
+
+    def try_tell[A: Actor, R](
+        self,
+        ref: ActorRef[A],
+        message: Message[A, R],
+    ) -> None:
+        """
+        Non-blocking tell. Raises ``asyncio.QueueFull`` if the inbox has no capacity.
+
+        :param ref: the target actor
+        :param message: the message to send
+        """
+        ref._inbox.try_tell(message)  # pyright: ignore[reportPrivateUsage]
+
+    def try_ask[A: Actor, R](
+        self,
+        ref: ActorRef[A],
+        message: Message[A, R],
+    ) -> Future[R]:
+        """
+        Non-blocking ask. Raises ``asyncio.QueueFull`` if the inbox has no capacity.
+
+        Returns a future that resolves to the reply once the actor processes it.
+
+        :param ref: the target actor
+        :param message: the message to send
+        :return: a future for the reply
+        """
+        return ref._inbox.try_ask(message)  # pyright: ignore[reportPrivateUsage]
 
     def notify_crash(
         self,
