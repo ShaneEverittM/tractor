@@ -141,7 +141,12 @@ async def select[T0, T1, T2, T3, T4, T5](
 async def select(*awaitables: Coroutine[object, object, object]) -> _Sel:
     """Await ``awaitables`` and return the first to complete (biased to the earliest)."""
     tasks = [ensure_future(a) for a in awaitables]
-    done, pending = await asyncio.wait(tasks, return_when=FIRST_COMPLETED)
+    try:
+        done, pending = await asyncio.wait(tasks, return_when=FIRST_COMPLETED)
+    except BaseException:
+        for task in tasks:
+            task.cancel()
+        raise
     for task in pending:
         _ = task.cancel()
     for index, task in enumerate(tasks):
@@ -195,7 +200,12 @@ async def first[T0, T1, T2, T3, T4, T5](
 async def first(*awaitables: Coroutine[object, object, object]) -> object:
     """Await ``awaitables`` and return the first result; use when types are distinct."""
     tasks = [ensure_future(a) for a in awaitables]
-    done, pending = await asyncio.wait(tasks, return_when=FIRST_COMPLETED)
+    try:
+        done, pending = await asyncio.wait(tasks, return_when=FIRST_COMPLETED)
+    except BaseException:
+        for task in tasks:
+            task.cancel()
+        raise
     for task in pending:
         _ = task.cancel()
     for task in tasks:
