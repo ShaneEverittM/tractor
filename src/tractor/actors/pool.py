@@ -92,7 +92,7 @@ class WorkerPool(Actor):
         self._running = 0
         self._waiters: deque[_Waiter] = deque()
         # Running task -> factory for the notification to send when it finishes.
-        self.pool: dict[Task[None], Callable[[], Awaitable[None]]] = {}
+        self._pool: dict[Task[None], Callable[[], Awaitable[None]]] = {}
 
     @override
     async def step(self, inbox: InboxHandle) -> ResponderHandle | None:
@@ -111,15 +111,15 @@ class WorkerPool(Actor):
         While the pool is idle this never resolves, so ``step`` waits only on the
         inbox until there is work to watch.
         """
-        if not self.pool:
+        if not self._pool:
             _ = await asyncio.Event().wait()  # never set: only the inbox matters
-        done, _ = await asyncio.wait(self.pool.keys(), return_when=FIRST_COMPLETED)
+        done, _ = await asyncio.wait(self._pool.keys(), return_when=FIRST_COMPLETED)
         return next(iter(done))
 
     async def _complete(self, finished: Task[None]) -> None:
         """Reap ``finished``: free its slot, then send its completion notification."""
         self._reap()
-        on_done = self.pool.pop(finished)
+        on_done = self._pool.pop(finished)
         await on_done()
 
     def _reap(self) -> None:
@@ -202,7 +202,7 @@ class WorkerPool(Actor):
     ) -> None:
         """Start the work coroutine and remember how to announce its completion."""
         future = asyncio.ensure_future(work())
-        self.pool[future] = on_done
+        self._pool[future] = on_done
 
 
 class _Submission[M]:
