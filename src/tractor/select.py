@@ -23,7 +23,7 @@ The winning awaitable's result is returned; if it raised, ``select`` re-raises.
 
 import asyncio
 from asyncio import FIRST_COMPLETED, ensure_future
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from typing import final, overload
 
@@ -97,41 +97,48 @@ _WRAPPERS: tuple[Callable[[object], _Sel], ...] = (
 
 
 @overload
-async def select[T0](a0: Awaitable[T0], /) -> Sel0[T0]: ...
+async def select[T0](a0: Coroutine[object, object, T0], /) -> Sel0[T0]: ...
 @overload
 async def select[T0, T1](
-    a0: Awaitable[T0], a1: Awaitable[T1], /
+    a0: Coroutine[object, object, T0], a1: Coroutine[object, object, T1], /
 ) -> Sel0[T0] | Sel1[T1]: ...
 @overload
 async def select[T0, T1, T2](
-    a0: Awaitable[T0], a1: Awaitable[T1], a2: Awaitable[T2], /
+    a0: Coroutine[object, object, T0],
+    a1: Coroutine[object, object, T1],
+    a2: Coroutine[object, object, T2],
+    /,
 ) -> Sel0[T0] | Sel1[T1] | Sel2[T2]: ...
 @overload
 async def select[T0, T1, T2, T3](
-    a0: Awaitable[T0], a1: Awaitable[T1], a2: Awaitable[T2], a3: Awaitable[T3], /
+    a0: Coroutine[object, object, T0],
+    a1: Coroutine[object, object, T1],
+    a2: Coroutine[object, object, T2],
+    a3: Coroutine[object, object, T3],
+    /,
 ) -> Sel0[T0] | Sel1[T1] | Sel2[T2] | Sel3[T3]: ...
 @overload
 async def select[T0, T1, T2, T3, T4](
-    a0: Awaitable[T0],
-    a1: Awaitable[T1],
-    a2: Awaitable[T2],
-    a3: Awaitable[T3],
-    a4: Awaitable[T4],
+    a0: Coroutine[object, object, T0],
+    a1: Coroutine[object, object, T1],
+    a2: Coroutine[object, object, T2],
+    a3: Coroutine[object, object, T3],
+    a4: Coroutine[object, object, T4],
     /,
 ) -> Sel0[T0] | Sel1[T1] | Sel2[T2] | Sel3[T3] | Sel4[T4]: ...
 @overload
 async def select[T0, T1, T2, T3, T4, T5](
-    a0: Awaitable[T0],
-    a1: Awaitable[T1],
-    a2: Awaitable[T2],
-    a3: Awaitable[T3],
-    a4: Awaitable[T4],
-    a5: Awaitable[T5],
+    a0: Coroutine[object, object, T0],
+    a1: Coroutine[object, object, T1],
+    a2: Coroutine[object, object, T2],
+    a3: Coroutine[object, object, T3],
+    a4: Coroutine[object, object, T4],
+    a5: Coroutine[object, object, T5],
     /,
 ) -> Sel0[T0] | Sel1[T1] | Sel2[T2] | Sel3[T3] | Sel4[T4] | Sel5[T5]: ...
 
 
-async def select(*awaitables: Awaitable[object]) -> _Sel:
+async def select(*awaitables: Coroutine[object, object, object]) -> _Sel:
     """Await ``awaitables`` and return the first to complete (biased to the earliest)."""
     tasks = [ensure_future(a) for a in awaitables]
     done, pending = await asyncio.wait(tasks, return_when=FIRST_COMPLETED)
@@ -142,7 +149,51 @@ async def select(*awaitables: Awaitable[object]) -> _Sel:
             return _WRAPPERS[index](task.result())
     raise AssertionError("select(): asyncio.wait returned with nothing done")
 
-async def first(*awaitables: Awaitable[object]) -> object:
+
+@overload
+async def first[T0](a0: Coroutine[object, object, T0], /) -> T0: ...
+@overload
+async def first[T0, T1](
+    a0: Coroutine[object, object, T0], a1: Coroutine[object, object, T1], /
+) -> T0 | T1: ...
+@overload
+async def first[T0, T1, T2](
+    a0: Coroutine[object, object, T0],
+    a1: Coroutine[object, object, T1],
+    a2: Coroutine[object, object, T2],
+    /,
+) -> T0 | T1 | T2: ...
+@overload
+async def first[T0, T1, T2, T3](
+    a0: Coroutine[object, object, T0],
+    a1: Coroutine[object, object, T1],
+    a2: Coroutine[object, object, T2],
+    a3: Coroutine[object, object, T3],
+    /,
+) -> T0 | T1 | T2 | T3: ...
+@overload
+async def first[T0, T1, T2, T3, T4](
+    a0: Coroutine[object, object, T0],
+    a1: Coroutine[object, object, T1],
+    a2: Coroutine[object, object, T2],
+    a3: Coroutine[object, object, T3],
+    a4: Coroutine[object, object, T4],
+    /,
+) -> T0 | T1 | T2 | T3 | T4: ...
+@overload
+async def first[T0, T1, T2, T3, T4, T5](
+    a0: Coroutine[object, object, T0],
+    a1: Coroutine[object, object, T1],
+    a2: Coroutine[object, object, T2],
+    a3: Coroutine[object, object, T3],
+    a4: Coroutine[object, object, T4],
+    a5: Coroutine[object, object, T5],
+    /,
+) -> T0 | T1 | T2 | T3 | T4 | T5: ...
+
+
+async def first(*awaitables: Coroutine[object, object, object]) -> object:
+    """Await ``awaitables`` and return the first result; use when types are distinct."""
     tasks = [ensure_future(a) for a in awaitables]
     done, pending = await asyncio.wait(tasks, return_when=FIRST_COMPLETED)
     for task in pending:
@@ -150,7 +201,7 @@ async def first(*awaitables: Awaitable[object]) -> object:
     for task in tasks:
         if task in done:
             return task.result()
-    raise AssertionError("select(): asyncio.wait returned with nothing done")
+    raise AssertionError("first(): asyncio.wait returned with nothing done")
 
 
-__all__ = ["select", "Sel0", "Sel1", "Sel2", "Sel3", "Sel4", "Sel5"]
+__all__ = ["select", "first", "Sel0", "Sel1", "Sel2", "Sel3", "Sel4", "Sel5"]

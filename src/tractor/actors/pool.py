@@ -10,7 +10,7 @@ from typing import override, final
 from tractor import Actor, Message
 from tractor.handles import InboxHandle, ResponderHandle
 from tractor.message import Context, Sender
-from tractor.select import select, Sel0, Sel1
+from tractor.select import first
 
 
 @final
@@ -97,10 +97,10 @@ class WorkerPool(Actor):
     @override
     async def step(self, inbox: InboxHandle) -> ResponderHandle | None:
         """Wait on the inbox and on task completions simultaneously."""
-        match await select(inbox.recv(), self._next_finished()):
-            case Sel0(handle):
+        match await first(inbox.recv(), self._next_finished()):
+            case ResponderHandle() as handle:
                 return handle
-            case Sel1(finished):
+            case Task() as finished:
                 await self._complete(finished)
                 return None
 
