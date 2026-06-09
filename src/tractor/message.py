@@ -41,6 +41,18 @@ class Context[A: Actor]:
     def ref(self) -> ActorRef[A]:
         return self._actor
 
+    async def tell[B: Actor, R](
+        self, target: ActorRef[B], message: Message[B, R]
+    ) -> None:
+        """Send ``message`` to ``target`` without waiting for a reply."""
+        await self._actor._runtime.tell(target, message)  # pyright: ignore[reportPrivateUsage]
+
+    async def ask[B: Actor, R](
+        self, target: ActorRef[B], message: Message[B, R]
+    ) -> R:
+        """Send ``message`` to ``target`` and wait for the reply."""
+        return await self._actor._runtime.ask(target, message)  # pyright: ignore[reportPrivateUsage]
+
 
 class Message[A: Actor, R](ABC):
     """
@@ -124,9 +136,22 @@ class Responder(Generic[A, R]):
         :param actor: the actor whose state should be passed to ``Message.dispatch``
         :param ctx: the context
         """
-        response = await self._message.dispatch(actor, ctx)
-        if self._reply:
-            self._reply.set_result(response)
+        try:
+            response = await self._message.dispatch(actor, ctx)
+        except BaseException as exc:
+            if self._reply is not None and not self._reply.done():
+                self._reply.set_exception(exc)
+            raise
+        else:
+            if self._reply is not None and not self._reply.done():
+                self._reply.set_result(response)
+
+    def set_stopped(self) -> None:
+        """Resolve the reply future with ``ActorStoppedError`` (inbox drain helper)."""
+        from tractor.errors import ActorStoppedError
+
+        if self._reply is not None and not self._reply.done():
+            self._reply.set_exception(ActorStoppedError())
 
 
 __all__ = ["Message", "Responder", "Sender", "Context"]

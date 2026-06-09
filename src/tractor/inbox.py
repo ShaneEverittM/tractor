@@ -73,5 +73,18 @@ class Inbox[A: Actor](Queue[Responder[A, object]]):
         responder = Responder(message).tell()
         self.put_nowait(responder)
 
+    def drain(self) -> None:
+        """
+        Drain all pending responders, resolving reply futures with ``ActorStoppedError``.
+
+        Called from the driver's ``finally`` block and from ``ActorRef.stop()``
+        to ensure waiting ``ask`` callers are unblocked rather than hanging.
+        """
+        while True:
+            try:
+                self.get_nowait().set_stopped()
+            except (asyncio.QueueEmpty, asyncio.QueueShutDown):
+                break
+
 
 __all__ = ["Inbox"]

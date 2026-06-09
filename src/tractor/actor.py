@@ -1,5 +1,6 @@
 """The definition of the core ``Actor`` base class."""
 
+from tractor.control_flow import ControlFlow
 from tractor.handles import InboxHandle, ResponderHandle
 
 
@@ -18,6 +19,17 @@ class Actor:
     async def on_stop(self):
         """Called when the actor is stopped."""
         pass
+
+    async def on_panic(self, _exc: BaseException) -> ControlFlow:
+        """
+        Called when an exception escapes from ``step()`` or ``handle.respond()``.
+
+        Return ``ControlFlow.Stop`` (the default) to terminate the actor, or
+        ``ControlFlow.Continue`` to swallow the error and keep running. The
+        runtime's crash policy observer is called unconditionally regardless of
+        the value returned here.
+        """
+        return ControlFlow.Stop
 
     async def step(self, inbox: InboxHandle) -> ResponderHandle | None:
         """
@@ -47,4 +59,4 @@ class Actor:
         return await inbox.recv()
 
 
-__all__ = ["Actor"]
+__all__ = ["Actor", "ControlFlow"]

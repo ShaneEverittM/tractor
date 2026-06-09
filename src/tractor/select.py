@@ -142,5 +142,15 @@ async def select(*awaitables: Awaitable[object]) -> _Sel:
             return _WRAPPERS[index](task.result())
     raise AssertionError("select(): asyncio.wait returned with nothing done")
 
+async def first(*awaitables: Awaitable[object]) -> object:
+    tasks = [ensure_future(a) for a in awaitables]
+    done, pending = await asyncio.wait(tasks, return_when=FIRST_COMPLETED)
+    for task in pending:
+        _ = task.cancel()
+    for task in tasks:
+        if task in done:
+            return task.result()
+    raise AssertionError("select(): asyncio.wait returned with nothing done")
+
 
 __all__ = ["select", "Sel0", "Sel1", "Sel2", "Sel3", "Sel4", "Sel5"]
