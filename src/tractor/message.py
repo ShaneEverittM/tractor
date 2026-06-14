@@ -47,9 +47,7 @@ class Context[A: Actor]:
         """Send ``message`` to ``target`` without waiting for a reply."""
         await self._actor._runtime.tell(target, message)  # pyright: ignore[reportPrivateUsage]
 
-    async def ask[B: Actor, R](
-        self, target: ActorRef[B], message: Message[B, R]
-    ) -> R:
+    async def ask[B: Actor, R](self, target: ActorRef[B], message: Message[B, R]) -> R:
         """Send ``message`` to ``target`` and wait for the reply."""
         return await self._actor._runtime.ask(target, message)  # pyright: ignore[reportPrivateUsage]
 

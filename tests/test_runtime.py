@@ -15,7 +15,8 @@ from tractor.message import Context
 
 @final
 class Echo(Actor):
-    async def echo(self, value: int) -> int:
+    @staticmethod
+    async def echo(value: int) -> int:
         return value
 
 
@@ -180,15 +181,19 @@ async def test_on_panic_continue_keeps_running():
     await ref.stop()
 
 
+@final
+class RecordPolicy:
+    def __init__(self):
+        self.calls: list[tuple[object, BaseException, ControlFlow]] = []
+
+    def on_crash(self, actor: object, exc: BaseException, flow: ControlFlow) -> None:
+        self.calls.append((actor, exc, flow))
+
+
 async def test_crash_policy_called():
-    calls: list[tuple[object, BaseException, ControlFlow]] = []
-
-    class RecordPolicy:
-        def on_crash(self, actor: object, exc: BaseException, flow: ControlFlow) -> None:
-            calls.append((actor, exc, flow))
-
+    policy = RecordPolicy()
     actor = Crasher(flow=ControlFlow.Stop)
-    runtime = Runtime(crash_policy=RecordPolicy())
+    runtime = Runtime(crash_policy=policy)
     ref = runtime.spawn(actor)
 
     with pytest.raises(ValueError):
@@ -197,8 +202,8 @@ async def test_crash_policy_called():
     async with asyncio.timeout(1):
         await ref._task  # pyright: ignore[reportPrivateUsage]
 
-    assert len(calls) == 1
-    _, exc, flow = calls[0]
+    assert len(policy.calls) == 1
+    _, exc, flow = policy.calls[0]
     assert isinstance(exc, ValueError)
     assert flow is ControlFlow.Stop
 

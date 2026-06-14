@@ -1,7 +1,7 @@
 import asyncio
 from asyncio import Future
 
-from tractor.select import select, Sel0, Sel1
+from tractor.select import first, select, Sel0, Sel1
 
 
 async def test_select_returns_the_completed_branch():
@@ -46,3 +46,25 @@ async def test_select_preserves_each_position_type():
             assert n + 1 == 2  # n is typed int
         case Sel1(s):
             assert s.upper() == "X"  # s is typed str
+
+
+async def test_select_keeps_future_done_across_calls():
+    f0: Future[str] = asyncio.get_running_loop().create_future()
+    f1: Future[int] = asyncio.get_running_loop().create_future()
+    f0.set_result("zero")
+    f1.set_result(1)
+
+    match await first(f0, f1):
+        case str(value):
+            assert value == "zero"
+        case _:
+            raise AssertionError("expected the position-0 branch to win")
+
+    # f0 is a new pending future, but f1 is still done from before.
+    f0 = asyncio.get_running_loop().create_future()
+
+    match await first(f0, f1):
+        case int(value):
+            assert value == 1
+        case _:
+            raise AssertionError("expected the position-1 branch to win")

@@ -20,7 +20,7 @@ class Actor:
         """Called when the actor is stopped."""
         pass
 
-    async def on_panic(self, _exc: BaseException) -> ControlFlow:
+    async def on_panic(self, _exc: BaseException, /) -> ControlFlow:
         """
         Called when an exception escapes from ``step()`` or ``handle.respond()``.
 
@@ -35,7 +35,7 @@ class Actor:
         """
         Await the next unit of work for the driver to process.
 
-        By default this just receives the next message from the inbox. Override
+        By default, this just receives the next message from the inbox. Override
         it to wait on additional sources — a future, a stream, a timer —
         alongside the inbox, typically with :func:`tractor.select.select`::
 

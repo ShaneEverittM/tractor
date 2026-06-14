@@ -33,9 +33,7 @@ class _RuntimeLike(Protocol):
         self, actor: object, exc: BaseException, flow: ControlFlow
     ) -> None: ...
 
-    async def ask[A: Actor, R](
-        self, ref: ActorRef[A], message: Message[A, R]
-    ) -> R: ...
+    async def ask[A: Actor, R](self, ref: ActorRef[A], message: Message[A, R]) -> R: ...
 
     async def tell[A: Actor, R](
         self, ref: ActorRef[A], message: Message[A, R]

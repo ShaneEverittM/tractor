@@ -83,7 +83,7 @@ class Inbox[A: Actor](Queue[Responder[A, object]]):
         while True:
             try:
                 self.get_nowait().set_stopped()
-            except (asyncio.QueueEmpty, asyncio.QueueShutDown):
+            except asyncio.QueueEmpty, asyncio.QueueShutDown:
                 break
 
 
