@@ -1,6 +1,6 @@
 {
     "recommendations": [
         "ms-python.python",
-        "detachhead.basedpyright"
+        "meta.pyrefly"
     ]
 }
