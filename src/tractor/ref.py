@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from asyncio import CancelledError
+from asyncio import CancelledError, Future
 from contextlib import suppress
 from typing import Protocol, final
 
@@ -38,6 +38,10 @@ class _RuntimeLike(Protocol):
     async def tell[A: Actor, R](
         self, ref: ActorRef[A], message: Message[A, R]
     ) -> None: ...
+
+    async def forward[A: Actor, R](
+        self, ref: ActorRef[A], message: Message[A, R]
+    ) -> Future[R]: ...
 
 
 @final

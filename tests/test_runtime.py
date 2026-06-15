@@ -6,6 +6,7 @@ import pytest
 
 from tractor import Actor, ActorRef, ActorStoppedError, ControlFlow, Message, Runtime
 from tractor.message import Context
+from tractor import future
 
 
 # ---------------------------------------------------------------------------
@@ -294,6 +295,251 @@ async def test_context_ask():
     assert result == 7
 
     await delegator_ref.stop()
+    await adder_ref.stop()
+
+
+# ---------------------------------------------------------------------------
+# Forwarding (reply delegation)
+# ---------------------------------------------------------------------------
+
+
+@final
+class Adder(Actor):
+    async def add(self, a: int, b: int) -> int:
+        return a + b
+
+
+@final
+@dataclass
+class Add(Message[Adder, int]):
+    a: int
+    b: int
+
+    @override
+    async def dispatch(self, actor: Adder, ctx: Context[Adder]) -> int:
+        return await actor.add(self.a, self.b)
+
+
+@final
+class Delegator(Actor):
+    def __init__(self, adder: ActorRef[Adder]):
+        self.adder = adder
+
+
+@final
+@dataclass
+class ForwardAdd(Message[Delegator, int]):
+    a: int
+    b: int
+
+    @override
+    async def dispatch(self, actor: Delegator, ctx: Context[Delegator]) -> int:
+        return ctx.forward(actor.adder, Add(self.a, self.b))
+
+
+async def test_forward_delegates_reply():
+    """A handler can delegate its reply to another actor via ctx.forward."""
+    runtime = Runtime()
+    adder_ref = runtime.spawn(Adder())
+    delegator_ref = runtime.spawn(Delegator(adder_ref))
+
+    result = await runtime.ask(delegator_ref, ForwardAdd(3, 4))
+    assert result == 7
+
+    await delegator_ref.stop()
+    await adder_ref.stop()
+
+
+async def test_forward_does_not_block_sender():
+    """After forwarding, the delegator keeps processing while the target is slow."""
+    gate = asyncio.Event()
+
+    @final
+    class SlowEcho(Actor):
+        async def echo(self, value: int) -> int:
+            _ = await gate.wait()  # blocks until released
+            return value
+
+    @final
+    @dataclass
+    class SlowEchoMsg(Message[SlowEcho, int]):
+        value: int
+
+        @override
+        async def dispatch(self, actor: SlowEcho, ctx: Context[SlowEcho]) -> int:
+            return await actor.echo(self.value)
+
+    @final
+    class Router(Actor):
+        def __init__(self, slow: ActorRef[SlowEcho]):
+            self.slow = slow
+
+    @final
+    @dataclass
+    class RouteEcho(Message[Router, int]):
+        value: int
+
+        @override
+        async def dispatch(self, actor: Router, ctx: Context[Router]) -> int:
+            return ctx.forward(actor.slow, SlowEchoMsg(self.value))
+
+    @final
+    @dataclass
+    class Quick(Message[Router, str]):
+        @override
+        async def dispatch(self, actor: Router, ctx: Context[Router]) -> str:
+            return "quick"
+
+    runtime = Runtime()
+    slow_ref = runtime.spawn(SlowEcho())
+    router_ref = runtime.spawn(Router(slow_ref))
+
+    # Forward an ask whose reply is gated (won't resolve yet).
+    pending = future.normalize(runtime.ask(router_ref, RouteEcho(5)))
+    await asyncio.sleep(0)
+
+    # The router is not blocked: it answers a subsequent message immediately,
+    # even though the forwarded reply is still gated.
+    async with asyncio.timeout(1):
+        assert await runtime.ask(router_ref, Quick()) == "quick"
+
+    assert not pending.done()
+
+    # Releasing the gate lets the forwarded reply reach the original caller.
+    gate.set()
+    async with asyncio.timeout(1):
+        assert await pending == 5
+
+    await router_ref.stop()
+    await slow_ref.stop()
+
+
+async def test_forward_propagates_exception():
+    """An exception from the forwarded target reaches the original caller."""
+
+    @final
+    class Boomer(Actor):
+        pass
+
+    @final
+    @dataclass
+    class BoomerMsg(Message[Boomer, int]):
+        @override
+        async def dispatch(self, actor: Boomer, ctx: Context[Boomer]) -> int:
+            raise ValueError("downstream boom")
+
+    @final
+    class Front(Actor):
+        def __init__(self, boomer: ActorRef[Boomer]):
+            self.boomer = boomer
+
+    @final
+    @dataclass
+    class FrontMsg(Message[Front, int]):
+        @override
+        async def dispatch(self, actor: Front, ctx: Context[Front]) -> int:
+            return ctx.forward(actor.boomer, BoomerMsg())
+
+    runtime = Runtime()
+    boomer_ref = runtime.spawn(Boomer())
+    front_ref = runtime.spawn(Front(boomer_ref))
+
+    with pytest.raises(ValueError, match="downstream boom"):
+        await runtime.ask(front_ref, FrontMsg())
+
+    await front_ref.stop()
+    await boomer_ref.stop()
+
+
+async def test_forward_tell():
+    """Forwarding under a tell still delivers the forwarded message to the target."""
+    result: asyncio.Future[int] = asyncio.get_event_loop().create_future()
+
+    @final
+    class Sink(Actor):
+        async def receive(self, value: int) -> None:
+            if not result.done():
+                result.set_result(value)
+
+    @final
+    @dataclass
+    class SinkMsg(Message[Sink, None]):
+        value: int
+
+        @override
+        async def dispatch(self, actor: Sink, ctx: Context[Sink]) -> None:
+            await actor.receive(self.value)
+
+    @final
+    class Relay(Actor):
+        def __init__(self, sink: ActorRef[Sink]):
+            self.sink = sink
+
+    @final
+    @dataclass
+    class RelayMsg(Message[Relay, None]):
+        value: int
+
+        @override
+        async def dispatch(self, actor: Relay, ctx: Context[Relay]) -> None:
+            return ctx.forward(actor.sink, SinkMsg(self.value))
+
+    runtime = Runtime()
+    sink_ref = runtime.spawn(Sink())
+    relay_ref = runtime.spawn(Relay(sink_ref))
+
+    await runtime.tell(relay_ref, RelayMsg(42))
+
+    async with asyncio.timeout(1):
+        assert await result == 42
+
+    await relay_ref.stop()
+    await sink_ref.stop()
+
+
+async def test_forward_chain():
+    """Forwarding chains: A forwards to B, which forwards to C."""
+    runtime = Runtime()
+    adder_ref = runtime.spawn(Adder())
+
+    @final
+    class Middle(Actor):
+        def __init__(self, adder: ActorRef[Adder]):
+            self.adder = adder
+
+    @final
+    @dataclass
+    class MiddleAdd(Message[Middle, int]):
+        a: int
+        b: int
+
+        @override
+        async def dispatch(self, actor: Middle, ctx: Context[Middle]) -> int:
+            return ctx.forward(actor.adder, Add(self.a, self.b))
+
+    @final
+    class Top(Actor):
+        def __init__(self, middle: ActorRef[Middle]):
+            self.middle = middle
+
+    @final
+    @dataclass
+    class TopAdd(Message[Top, int]):
+        a: int
+        b: int
+
+        @override
+        async def dispatch(self, actor: Top, ctx: Context[Top]) -> int:
+            return ctx.forward(actor.middle, MiddleAdd(self.a, self.b))
+
+    middle_ref = runtime.spawn(Middle(adder_ref))
+    top_ref = runtime.spawn(Top(middle_ref))
+
+    result = await runtime.ask(top_ref, TopAdd(10, 32))
+    assert result == 42
+
+    await top_ref.stop()
+    await middle_ref.stop()
     await adder_ref.stop()
 
 

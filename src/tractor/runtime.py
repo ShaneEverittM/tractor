@@ -68,6 +68,26 @@ class Runtime:
         """Send ``message`` to ``ref`` without waiting for a reply."""
         await ref._inbox.tell(message)  # pyright: ignore[reportPrivateUsage]
 
+    async def forward[A: Actor, R](
+        self,
+        ref: ActorRef[A],
+        message: Message[A, R],
+    ) -> Future[R]:
+        """
+        Send ``message`` to ``ref`` and return its reply future *without* awaiting it.
+
+        Like :meth:`ask`, but the caller is handed the pending reply future
+        instead of blocking on it. This is the entry point for reply
+        *forwarding* (see ``Context.forward``): a handler delegates its own
+        reply to ``ref`` by linking this future into the original caller's,
+        leaving the delegating actor free to process its next message.
+
+        :param ref: the target actor
+        :param message: the message to send
+        :return: a future for the reply
+        """
+        return await ref._inbox.ask(message)  # pyright: ignore[reportPrivateUsage]
+
     def try_tell[A: Actor, R](
         self,
         ref: ActorRef[A],

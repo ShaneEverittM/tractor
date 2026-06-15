@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from asyncio import Future
 from collections.abc import Awaitable, Callable
-from typing import Generic, Self, TypeVar, final, TYPE_CHECKING
+from typing import Generic, Self, TypeVar, cast, final, TYPE_CHECKING
 
 from tractor.actor import Actor
 
@@ -50,6 +50,48 @@ class Context[A: Actor]:
     async def ask[B: Actor, R](self, target: ActorRef[B], message: Message[B, R]) -> R:
         """Send ``message`` to ``target`` and wait for the reply."""
         return await self._actor._runtime.ask(target, message)  # pyright: ignore[reportPrivateUsage]
+
+    def forward[B: Actor, R](self, target: ActorRef[B], message: Message[B, R]) -> R:
+        """
+        Delegate this handler's reply to ``target``.
+
+        ``return`` (do **not** ``await``) the result from a ``dispatch`` handler
+        to hand the current ask's reply off to ``target``: ``message`` is sent to
+        ``target`` and *its* reply — value or exception — is delivered straight to
+        the original caller's future. The delegating actor does not block waiting
+        for that reply; it is free to process its next message immediately.
+
+        This returns an opaque proxy that the driver recognizes when ``dispatch``
+        returns. The declared ``-> R`` is a contained cast (the proxy is not
+        really an ``R``); it lets a handler ``return ctx.forward(...)`` while the
+        type checker still enforces that ``message``'s reply type matches the
+        handler's declared reply type ``R``.
+        """
+        return cast(R, _Forward(target, message))
+
+    async def _forward[B: Actor, R](
+        self, fwd: _Forward[B, R], reply: Future[R] | None
+    ) -> None:
+        """Carry out a ``forward`` directive returned from ``dispatch``.
+
+        Routes the forwarded send through the runtime (keeping it observable) and
+        links the target's reply future into the original caller's ``reply``.
+        Invoked by ``Responder.respond``; not part of the public handler API.
+        """
+        runtime = self._actor._runtime  # pyright: ignore[reportPrivateUsage]
+        if reply is None:
+            # The original ask was a tell: just deliver the forwarded message.
+            await runtime.tell(fwd._target, fwd._message)
+            return
+        try:
+            source = await runtime.forward(fwd._target, fwd._message)
+        except BaseException as exc:
+            # Forwarding to a stopped/full target must not crash this actor; the
+            # original caller sees the failure instead.
+            if not reply.done():
+                reply.set_exception(exc)
+            return
+        _link_reply(source, reply)
 
 
 class Message[A: Actor, R](ABC):
@@ -141,6 +183,12 @@ class Responder(Generic[A, R]):
                 self._reply.set_exception(exc)
             raise
         else:
+            if isinstance(response, _Forward):
+                # The handler delegated its reply; hand it off rather than
+                # resolving the caller's future with the proxy itself.
+                reply, self._reply = self._reply, None
+                await ctx._forward(response, reply)
+                return
             if self._reply is not None and not self._reply.done():
                 self._reply.set_result(response)
 
@@ -150,6 +198,40 @@ class Responder(Generic[A, R]):
 
         if self._reply is not None and not self._reply.done():
             self._reply.set_exception(ActorStoppedError())
+
+
+@final
+class _Forward(Generic[A, R]):
+    """
+    An opaque directive returned from a handler to delegate its reply.
+
+    Carries the ``target`` and the ``message`` to send it. ``Context.forward``
+    constructs one (cast to the reply type ``R``); ``Responder.respond``
+    recognizes it and routes the handoff through ``Context._forward``. Users
+    never construct or name this type directly.
+    """
+
+    def __init__(self, target: ActorRef[A], message: Message[A, R]):
+        self._target = target
+        self._message = message
+
+
+def _link_reply[T](source: Future[T], reply: Future[T]) -> None:
+    """Copy ``source``'s eventual result, exception, or cancellation into ``reply``."""
+
+    def _on_done(done: Future[T]) -> None:
+        if reply.done():
+            return
+        if done.cancelled():
+            _ = reply.cancel()
+            return
+        exc = done.exception()
+        if exc is not None:
+            reply.set_exception(exc)
+        else:
+            reply.set_result(done.result())
+
+    source.add_done_callback(_on_done)
 
 
 __all__ = ["Message", "Responder", "Sender", "Context"]
