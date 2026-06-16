@@ -7,23 +7,24 @@ quick start.
 
 ## Commands
 
-This project uses **uv**. Run everything through `uv run` so the locked dev
-environment is used.
+This repo uses a nix flake dev env (`.envrc` = `use flake`), which puts the
+Nix-built virtualenv on `PATH`. Inside that shell (where you already are via
+direnv) the tools are directly callable — no `uv run` wrapper needed:
 
 ```bash
-uv run pytest                 # run the test suite (asyncio_mode = auto)
-uv run pytest tests/test_runtime.py::test_name   # single test
-uv run ruff check             # lint
-uv run ruff format            # format
-uv run pyrefly check          # type check (the authoritative checker — see below)
+pytest                                  # run the test suite (asyncio_mode = auto)
+pytest tests/test_runtime.py::test_name # single test
+ruff check                              # lint
+ruff format                             # format
+pyrefly check                           # type check (the authoritative checker — see below)
 ```
 
 Always run `pyrefly check` before considering a change done — type correctness
 is part of this library's contract.
 
-This repo uses a nix flake dev env (`.envrc` = `use flake`). The flake points
-uv at the Nix-built virtualenv (`UV_PROJECT_ENVIRONMENT` / `VIRTUAL_ENV`), so
-`uv run` uses it directly and ignores any stray repo-local `.venv`.
+(If you're somehow outside the dev shell, `uv run <cmd>` is the fallback; the
+flake also points uv at the same venv via `UV_PROJECT_ENVIRONMENT` /
+`VIRTUAL_ENV`, so it stays consistent.)
 
 ## Hard constraints
 
