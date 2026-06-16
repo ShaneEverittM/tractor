@@ -4,9 +4,11 @@ from collections.abc import Awaitable, Callable
 from typing import Generic, Self, TypeVar, cast, final, TYPE_CHECKING
 
 from tractor.actor import Actor
+from tractor.errors import ActorStoppedError
 
 if TYPE_CHECKING:
-    from tractor.ref import ActorRef, _RuntimeLike  # pyright: ignore[reportPrivateUsage]
+    from tractor.protocols import RuntimeLike
+    from tractor.ref import ActorRef
 
 
 # TODO: Make this a Protocol so it can't be constructed directly; it should
@@ -116,7 +118,7 @@ class Message[A: Actor, R](ABC):
         ...
 
     @classmethod
-    def sender(cls, runtime: _RuntimeLike, ref: ActorRef[A]) -> Sender[Self, R]:
+    def sender(cls, runtime: RuntimeLike, ref: ActorRef[A]) -> Sender[Self, R]:
         return Sender(lambda msg: runtime.ask(ref, msg))
 
     def responder(self) -> Responder[A, R]:
@@ -194,8 +196,6 @@ class Responder(Generic[A, R]):
 
     def set_stopped(self) -> None:
         """Resolve the reply future with ``ActorStoppedError`` (inbox drain helper)."""
-        from tractor.errors import ActorStoppedError
-
         if self._reply is not None and not self._reply.done():
             self._reply.set_exception(ActorStoppedError())
 

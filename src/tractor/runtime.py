@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from asyncio import Future
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
 from tractor.control_flow import ControlFlow, CrashPolicy, LogCrashPolicy
+from tractor.protocols import RuntimeLike
 
 if TYPE_CHECKING:
     from tractor.actor import Actor
@@ -13,7 +14,7 @@ if TYPE_CHECKING:
     from tractor.ref import ActorRef
 
 
-class Runtime:
+class Runtime(RuntimeLike):
     """
     The top-level orchestration object.
 
@@ -51,6 +52,7 @@ class Runtime:
 
         return ActorRef(actor, capacity=capacity, runtime=self)
 
+    @override
     async def ask[A: Actor, R](
         self,
         ref: ActorRef[A],
@@ -60,6 +62,7 @@ class Runtime:
         future = await ref._inbox.ask(message)  # pyright: ignore[reportPrivateUsage]
         return await future
 
+    @override
     async def tell[A: Actor, R](
         self,
         ref: ActorRef[A],
@@ -68,6 +71,7 @@ class Runtime:
         """Send ``message`` to ``ref`` without waiting for a reply."""
         await ref._inbox.tell(message)  # pyright: ignore[reportPrivateUsage]
 
+    @override
     async def forward[A: Actor, R](
         self,
         ref: ActorRef[A],
@@ -117,6 +121,7 @@ class Runtime:
         """
         return ref._inbox.try_ask(message)  # pyright: ignore[reportPrivateUsage]
 
+    @override
     def notify_crash(
         self,
         actor: object,

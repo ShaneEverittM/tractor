@@ -3,20 +3,23 @@
 from __future__ import annotations
 
 import asyncio
-from asyncio import CancelledError, Future
+from asyncio import CancelledError
 from contextlib import suppress
-from typing import Protocol, final
+from typing import TYPE_CHECKING, final
 
 from tractor.actor import Actor
 from tractor.control_flow import ControlFlow
 from tractor.handles import InboxHandle, ResponderHandle
 from tractor.inbox import Inbox
-from tractor.message import Context, Message
+from tractor.message import Context
 
-_default_runtime: _RuntimeLike | None = None
+if TYPE_CHECKING:
+    from tractor.protocols import RuntimeLike
+
+_default_runtime: RuntimeLike | None = None
 
 
-def _get_default_runtime() -> _RuntimeLike:
+def _get_default_runtime() -> RuntimeLike:
     """Return the module-level default runtime, creating it on first access."""
     global _default_runtime
     if _default_runtime is None:
@@ -24,24 +27,6 @@ def _get_default_runtime() -> _RuntimeLike:
 
         _default_runtime = Runtime()
     return _default_runtime
-
-
-class _RuntimeLike(Protocol):
-    """Structural type satisfied by ``Runtime``; used in ``ActorRef`` to avoid a cycle."""
-
-    def notify_crash(
-        self, actor: object, exc: BaseException, flow: ControlFlow
-    ) -> None: ...
-
-    async def ask[A: Actor, R](self, ref: ActorRef[A], message: Message[A, R]) -> R: ...
-
-    async def tell[A: Actor, R](
-        self, ref: ActorRef[A], message: Message[A, R]
-    ) -> None: ...
-
-    async def forward[A: Actor, R](
-        self, ref: ActorRef[A], message: Message[A, R]
-    ) -> Future[R]: ...
 
 
 @final
@@ -60,7 +45,7 @@ class ActorRef[A: Actor]:
         actor: A,
         *,
         capacity: int | None = None,
-        runtime: _RuntimeLike | None = None,
+        runtime: RuntimeLike | None = None,
     ):
         """
         Wrap an actor in an ``ActorRef``.
@@ -76,7 +61,7 @@ class ActorRef[A: Actor]:
             runtime = _get_default_runtime()
         self._actor = actor
         self._inbox = Inbox[A](capacity)
-        self._runtime: _RuntimeLike = runtime
+        self._runtime: RuntimeLike = runtime
         self._task = asyncio.create_task(self._driver())
 
     async def _driver(self) -> None:
