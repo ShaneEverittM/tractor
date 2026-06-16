@@ -7,24 +7,26 @@ quick start.
 
 ## Commands
 
-This repo uses a nix flake dev env (`.envrc` = `use flake`), which puts the
-Nix-built virtualenv on `PATH`. Inside that shell (where you already are via
-direnv) the tools are directly callable — no `uv run` wrapper needed:
+This repo uses a nix flake dev env (`.envrc` = `use flake`). Run tooling through
+`uv run` — `uv` is on `PATH` and the flake points it at the Nix-built virtualenv
+(`UV_PROJECT_ENVIRONMENT` / `VIRTUAL_ENV`), so this works regardless of whether
+the venv's `bin/` made it onto `PATH`:
 
 ```bash
-pytest                                  # run the test suite (asyncio_mode = auto)
-pytest tests/test_runtime.py::test_name # single test
-ruff check                              # lint
-ruff format                             # format
-pyrefly check                           # type check (the authoritative checker — see below)
+uv run pytest                                  # run the test suite (asyncio_mode = auto)
+uv run pytest tests/test_runtime.py::test_name # single test
+uv run ruff check                              # lint
+uv run ruff format                             # format
+uv run pyrefly check                           # type check (the authoritative checker — see below)
 ```
 
 Always run `pyrefly check` before considering a change done — type correctness
 is part of this library's contract.
 
-(If you're somehow outside the dev shell, `uv run <cmd>` is the fallback; the
-flake also points uv at the same venv via `UV_PROJECT_ENVIRONMENT` /
-`VIRTUAL_ENV`, so it stays consistent.)
+In a fully-loaded interactive direnv shell the venv `bin/` is on `PATH`, so a
+human can drop the `uv run` prefix and just call `pytest` / `ruff` / `pyrefly`.
+That shortcut is **not** reliable for tooling/agents whose `PATH` is pinned and
+doesn't include the venv — prefer `uv run` there.
 
 ## Hard constraints
 
