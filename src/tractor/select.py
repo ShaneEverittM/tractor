@@ -1,24 +1,26 @@
-"""A typed, ``match``-friendly ``select`` over several awaitables.
+"""A typed, `match`-friendly `select` over several awaitables.
 
-Inspired by ``tokio::select!``: await a handful of awaitables at once and branch
+Inspired by `tokio::select!`: await a handful of awaitables at once and branch
 on whichever finishes first. Each argument position is reported as its own
-``Sel`` wrapper, so the result destructures with ``match`` and every arm keeps
-that position's own type::
+`Sel` wrapper, so the result destructures with `match` and every arm keeps
+that position's own type:
 
-    match await select(inbox.get(), slot_freed):
-        case Sel0(message):
-            ...   # message has inbox.get()'s element type
-        case Sel1(_):
-            ...   # the slot-freed branch won
+```python
+match await select(inbox.get(), slot_freed):
+    case Sel0(message):
+        ...   # message has inbox.get()'s element type
+    case Sel1(_):
+        ...   # the slot-freed branch won
+```
 
-``select`` is *biased to the earliest argument*: if several complete on the same
+`select` is *biased to the earliest argument*: if several complete on the same
 turn, the lowest-indexed one wins. The awaitables that did not win are cancelled,
-so pass sources you can cheaply recreate next call — a fresh ``queue.get()``, a
+so pass sources you can cheaply recreate next call — a fresh `queue.get()`, a
 re-polled stream — exactly as you would reconstruct branches on each iteration of
-a ``tokio::select!`` loop. (Put your highest-priority, must-not-drop source, such
+a `tokio::select!` loop. (Put your highest-priority, must-not-drop source, such
 as an actor's inbox, in position 0 so a tie never discards it.)
 
-The winning awaitable's result is returned; if it raised, ``select`` re-raises.
+The winning awaitable's result is returned; if it raised, `select` re-raises.
 """
 
 import asyncio
@@ -32,8 +34,8 @@ class _Sel:
     """
     Common base for the position wrappers.
 
-    It exists only to give ``select``'s implementation a single concrete return
-    type; callers always receive the precise ``Sel0``..``Sel5`` subtypes via the
+    It exists only to give `select`'s implementation a single concrete return
+    type; callers always receive the precise `Sel0`..`Sel5` subtypes via the
     overloads.
     """
 
@@ -157,7 +159,7 @@ async def _waiter(*awaitables: Awaitable[object]) -> tuple[object, int]:
 
 
 async def select(*awaitables: Awaitable[object]) -> _Sel:
-    """Await ``awaitables`` and return the first to complete (biased to the earliest)."""
+    """Await `awaitables` and return the first to complete (biased to the earliest)."""
     result, index = await _waiter(*awaitables)
     return _WRAPPERS[index](result)
 
@@ -203,7 +205,7 @@ async def first[T0, T1, T2, T3, T4, T5](
 
 
 async def first(*awaitables: Awaitable[object]) -> object:
-    """Await ``awaitables`` and return the first result; use when types are distinct."""
+    """Await `awaitables` and return the first result; use when types are distinct."""
     result, _ = await _waiter(*awaitables)
     return result
 

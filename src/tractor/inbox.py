@@ -11,9 +11,9 @@ from tractor.message import Message, Responder
 @final
 class Inbox[A: Actor](Queue[Responder[A, object]]):
     """
-    The inbox of an ``Actor``.
+    The inbox of an `Actor`.
 
-    This is a specialization of ``asyncio.Queue`` with methods
+    This is a specialization of `asyncio.Queue` with methods
     that enqueue and create replies atomically.
     """
 
@@ -22,8 +22,8 @@ class Inbox[A: Actor](Queue[Responder[A, object]]):
         Create an inbox.
 
         :param capacity: the most messages that may wait unprocessed before
-            senders block (or, for the ``try_*`` variants, are rejected with
-            ``asyncio.QueueFull``); ``None`` leaves the inbox unbounded
+            senders block (or, for the `try_*` variants, are rejected with
+            `asyncio.QueueFull`); `None` leaves the inbox unbounded
         """
         super().__init__(maxsize=capacity if capacity is not None else 0)
 
@@ -48,7 +48,7 @@ class Inbox[A: Actor](Queue[Responder[A, object]]):
 
         :param message: the message to enqueue
         :return: a future that will resolve to the reply
-        :raises QueueFull if no capacity is available
+        :raises QueueFull: if no capacity is available
         """
         responder, reply = Responder(message).ask()
         self.put_nowait(responder)
@@ -68,17 +68,17 @@ class Inbox[A: Actor](Queue[Responder[A, object]]):
         Try to enqueue a message.
 
         :param message: the message to enqueue
-        :raises QueueFull if no capacity is available
+        :raises QueueFull: if no capacity is available
         """
         responder = Responder(message).tell()
         self.put_nowait(responder)
 
     def drain(self) -> None:
         """
-        Drain all pending responders, resolving reply futures with ``ActorStoppedError``.
+        Drain all pending responders, resolving reply futures with `ActorStoppedError`.
 
-        Called from the driver's ``finally`` block and from ``ActorRef.stop()``
-        to ensure waiting ``ask`` callers are unblocked rather than hanging.
+        Called from the driver's `finally` block and from `ActorRef.stop()`
+        to ensure waiting `ask` callers are unblocked rather than hanging.
         """
         while True:
             try:

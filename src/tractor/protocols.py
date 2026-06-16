@@ -1,12 +1,12 @@
 """Structural protocols shared across the package.
 
 These exist to decouple modules that would otherwise form import cycles. The
-canonical example is :class:`RuntimeLike`: ``ActorRef`` and ``Message`` both need
-to talk about "a runtime", but importing ``Runtime`` directly would create a
-cycle (``runtime`` imports ``ref`` to spawn actors). Routing the dependency
+canonical example is `RuntimeLike`: `ActorRef` and `Message` both need
+to talk about "a runtime", but importing `Runtime` directly would create a
+cycle (`runtime` imports `ref` to spawn actors). Routing the dependency
 through a structural protocol breaks that knot in one place.
 
-This module imports nothing from ``tractor`` at runtime, so it is always safe to
+This module imports nothing from `tractor` at runtime, so it is always safe to
 import from anywhere in the package.
 """
 
@@ -24,11 +24,11 @@ if TYPE_CHECKING:
 
 
 class RuntimeLike(Protocol):
-    """The subset of ``Runtime`` that ``ActorRef`` and ``Message`` depend on.
+    """The subset of `Runtime` that `ActorRef` and `Message` depend on.
 
-    ``Runtime`` inherits this protocol so conformance is checked at the
+    `Runtime` inherits this protocol so conformance is checked at the
     definition site rather than only structurally at call sites — if the two
-    drift apart, the type checker flags ``Runtime`` directly.
+    drift apart, the type checker flags `Runtime` directly.
     """
 
     def notify_crash(

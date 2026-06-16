@@ -16,18 +16,20 @@ from tractor.select import first
 @final
 class Reservation(Awaitable[None]):
     """
-    A place in a :class:`WorkerPool`, returned by a ``Submit`` submission.
+    A place in a `WorkerPool`, returned by a `Submit` submission.
 
     A reservation is *granted* the moment the pool has a free slot for your
     task, at which point the task begins running. Awaiting the reservation
-    blocks until that moment::
+    blocks until that moment:
 
-        reservation = await pool.ask(Submit(work, Done(), sender))
-        await reservation   # returns once your task has actually started
+    ```python
+    reservation = await pool.ask(Submit(work, Done(), sender))
+    await reservation   # returns once your task has actually started
+    ```
 
-    Awaiting is how you apply back-pressure: in a submit loop, ``await`` each
+    Awaiting is how you apply back-pressure: in a submit loop, `await` each
     reservation before submitting the next task and you will never have more
-    than the pool's ``limit`` of work outstanding. Awaiting is optional, though
+    than the pool's `limit` of work outstanding. Awaiting is optional, though
     — the task runs regardless of whether anyone waits on its reservation, so a
     reservation you drop is harmless. It is purely an "it has started" signal.
     """
@@ -37,7 +39,7 @@ class Reservation(Awaitable[None]):
 
     @property
     def pending(self) -> bool:
-        """``True`` while the task is still queued, waiting for a free slot."""
+        """`True` while the task is still queued, waiting for a free slot."""
         return not self._started.done()
 
     @override
@@ -62,20 +64,20 @@ class WorkerPool(Actor):
 
     Submit work with one of two messages:
 
-    * ``Submit`` — *back-pressure*, always accepted. Replies with a
-      :class:`Reservation`; await it to block until your task actually starts.
+    * `Submit` — *back-pressure*, always accepted. Replies with a
+      `Reservation`; await it to block until your task actually starts.
       When the pool is full, queued submissions are granted slots strictly
       first-come-first-served as running tasks finish.
-    * ``TrySubmit`` — *early reject*. Replies ``True`` if the task started
-      immediately, or ``False`` if it could not. It never waits and never
+    * `TrySubmit` — *early reject*. Replies `True` if the task started
+      immediately, or `False` if it could not. It never waits and never
       queues.
 
-    ``Submit`` owns the fair waiter queue; ``TrySubmit`` is the
-    non-queuing shortcut over the same capacity. Because a queued ``Submit``
-    sits ahead of any later submission, a ``TrySubmit`` cannot jump the line
+    `Submit` owns the fair waiter queue; `TrySubmit` is the
+    non-queuing shortcut over the same capacity. Because a queued `Submit`
+    sits ahead of any later submission, a `TrySubmit` cannot jump the line
     — it is rejected whenever anyone is already waiting.
 
-    The pool overrides :meth:`step` to wait on its inbox *and* on its running
+    The pool overrides `step` to wait on its inbox *and* on its running
     tasks at once: when a task finishes it is reaped right there in the driver —
     its slot handed to the next waiter, its completion notification sent — with
     no self-sent message and no completion callback.
@@ -85,7 +87,7 @@ class WorkerPool(Actor):
         """
         Create a worker pool.
 
-        :param limit: the most tasks allowed to run at once, or ``None`` for no
+        :param limit: the most tasks allowed to run at once, or `None` for no
             limit (every submission then starts immediately)
         """
         self.limit = limit
@@ -108,7 +110,7 @@ class WorkerPool(Actor):
         """
         Resolve to a running task as soon as one of them finishes.
 
-        While the pool is idle this never resolves, so ``step`` waits only on the
+        While the pool is idle this never resolves, so `step` waits only on the
         inbox until there is work to watch.
         """
         if not self._pool:
@@ -117,7 +119,7 @@ class WorkerPool(Actor):
         return next(iter(done))
 
     async def _complete(self, finished: Task[None]) -> None:
-        """Reap ``finished``: free its slot, then send its completion notification."""
+        """Reap `finished`: free its slot, then send its completion notification."""
         self._reap()
         on_done = self._pool.pop(finished)
         await on_done()
@@ -137,7 +139,7 @@ class WorkerPool(Actor):
         on_done: Callable[[], Awaitable[None]],
     ) -> Reservation:
         """
-        Submit ``work``, queueing for a slot if the pool is full (back-pressure).
+        Submit `work`, queueing for a slot if the pool is full (back-pressure).
 
         If a slot is free the task starts now and the returned reservation is
         already granted; otherwise the submission joins the back of the fair
@@ -145,7 +147,7 @@ class WorkerPool(Actor):
 
         :param work: a factory producing the work to run, called once a slot is claimed
         :param on_done: a factory producing the completion notification
-        :return: a :class:`Reservation` that resolves when the task starts running
+        :return: a `Reservation` that resolves when the task starts running
         """
         started = Future[None]()
         if self._has_free_slot():
@@ -161,15 +163,15 @@ class WorkerPool(Actor):
         on_done: Callable[[], Awaitable[None]],
     ) -> bool:
         """
-        Submit ``work`` only if it can start right now; otherwise reject it.
+        Submit `work` only if it can start right now; otherwise reject it.
 
-        Rejects (returns ``False``) when the pool is full *or* when other
+        Rejects (returns `False`) when the pool is full *or* when other
         submissions are already queued ahead of it. On rejection neither factory
         is invoked, so a rejected submission constructs nothing.
 
         :param work: a factory producing the work to run, called only if accepted
         :param on_done: a factory producing the completion notification
-        :return: ``True`` if the task started, ``False`` if it was rejected
+        :return: `True` if the task started, `False` if it was rejected
         """
         if not self._has_free_slot():
             return False
@@ -191,7 +193,7 @@ class WorkerPool(Actor):
         work: Callable[[], Awaitable[None]],
         on_done: Callable[[], Awaitable[None]],
     ) -> None:
-        """Claim a fresh slot and schedule ``work`` in it."""
+        """Claim a fresh slot and schedule `work` in it."""
         self._running += 1
         self._schedule(work, on_done)
 
@@ -217,7 +219,7 @@ class _Submission[M]:
         """
         :param task: a factory producing the work to run on the pool
         :param message: the message to deliver once the work finishes
-        :param sender: the sender that delivers ``message``
+        :param sender: the sender that delivers `message`
         """
         self._task: Callable[[], Awaitable[None]] = task
         self._message: M = message
@@ -231,9 +233,9 @@ class _Submission[M]:
 @final
 class Submit[M](_Submission[M], Message[WorkerPool, Reservation]):
     """
-    Submit work to a :class:`WorkerPool` with back-pressure; always accepted.
+    Submit work to a `WorkerPool` with back-pressure; always accepted.
 
-    Replies with a :class:`Reservation`. Await it to block until your task
+    Replies with a `Reservation`. Await it to block until your task
     starts; awaiting each reservation before submitting the next caps your
     outstanding work at the pool's limit.
     """
@@ -248,9 +250,9 @@ class Submit[M](_Submission[M], Message[WorkerPool, Reservation]):
 @final
 class TrySubmit[M](_Submission[M], Message[WorkerPool, bool]):
     """
-    Submit work to a :class:`WorkerPool` only if a slot is free now; else reject.
+    Submit work to a `WorkerPool` only if a slot is free now; else reject.
 
-    Replies ``True`` if the task started immediately, or ``False`` if the pool
+    Replies `True` if the task started immediately, or `False` if the pool
     was full or other submissions were already queued ahead of it.
     """
 

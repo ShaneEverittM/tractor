@@ -1,4 +1,4 @@
-"""The ``Runtime`` — the top-level orchestration object for a tractor application."""
+"""The `Runtime` — the top-level orchestration object for a tractor application."""
 
 from __future__ import annotations
 
@@ -18,18 +18,20 @@ class Runtime(RuntimeLike):
     """
     The top-level orchestration object.
 
-    Create one at application startup and use it to spawn all actors::
+    Create one at application startup and use it to spawn all actors:
 
-        runtime = Runtime()
-        ref = runtime.spawn(MyActor())
-        await runtime.ask(ref, MyMessage())
+    ```python
+    runtime = Runtime()
+    ref = runtime.spawn(MyActor())
+    await runtime.ask(ref, MyMessage())
+    ```
 
-    Inside message handlers, use ``ctx.ask`` / ``ctx.tell`` which forward here,
+    Inside message handlers, use `ctx.ask` / `ctx.tell` which forward here,
     carrying sender identity for future tracing.
 
     :param crash_policy: observer called after every actor panic (after the
-        actor's own ``on_panic`` has already made its ``ControlFlow`` decision).
-        Defaults to ``LogCrashPolicy``.
+        actor's own `on_panic` has already made its `ControlFlow` decision).
+        Defaults to `LogCrashPolicy`.
     """
 
     def __init__(self, crash_policy: CrashPolicy | None = None) -> None:
@@ -42,11 +44,11 @@ class Runtime(RuntimeLike):
         capacity: int | None = None,
     ) -> ActorRef[A]:
         """
-        Spawn ``actor`` and return a handle to it.
+        Spawn `actor` and return a handle to it.
 
         :param actor: the actor instance to wrap and start
-        :param capacity: inbox capacity (``None`` for unbounded)
-        :return: an ``ActorRef`` through which messages can be addressed
+        :param capacity: inbox capacity (`None` for unbounded)
+        :return: an `ActorRef` through which messages can be addressed
         """
         from tractor.ref import ActorRef  # deferred: breaks ref ↔ runtime cycle
 
@@ -58,7 +60,7 @@ class Runtime(RuntimeLike):
         ref: ActorRef[A],
         message: Message[A, R],
     ) -> R:
-        """Send ``message`` to ``ref`` and wait for the reply."""
+        """Send `message` to `ref` and wait for the reply."""
         future = await ref._inbox.ask(message)  # pyright: ignore[reportPrivateUsage]
         return await future
 
@@ -68,7 +70,7 @@ class Runtime(RuntimeLike):
         ref: ActorRef[A],
         message: Message[A, R],
     ) -> None:
-        """Send ``message`` to ``ref`` without waiting for a reply."""
+        """Send `message` to `ref` without waiting for a reply."""
         await ref._inbox.tell(message)  # pyright: ignore[reportPrivateUsage]
 
     @override
@@ -78,12 +80,12 @@ class Runtime(RuntimeLike):
         message: Message[A, R],
     ) -> Future[R]:
         """
-        Send ``message`` to ``ref`` and return its reply future *without* awaiting it.
+        Send `message` to `ref` and return its reply future *without* awaiting it.
 
-        Like :meth:`ask`, but the caller is handed the pending reply future
+        Like `ask`, but the caller is handed the pending reply future
         instead of blocking on it. This is the entry point for reply
-        *forwarding* (see ``Context.forward``): a handler delegates its own
-        reply to ``ref`` by linking this future into the original caller's,
+        *forwarding* (see `Context.forward`): a handler delegates its own
+        reply to `ref` by linking this future into the original caller's,
         leaving the delegating actor free to process its next message.
 
         :param ref: the target actor
@@ -98,7 +100,7 @@ class Runtime(RuntimeLike):
         message: Message[A, R],
     ) -> None:
         """
-        Non-blocking tell. Raises ``asyncio.QueueFull`` if the inbox has no capacity.
+        Non-blocking tell. Raises `asyncio.QueueFull` if the inbox has no capacity.
 
         :param ref: the target actor
         :param message: the message to send
@@ -111,7 +113,7 @@ class Runtime(RuntimeLike):
         message: Message[A, R],
     ) -> Future[R]:
         """
-        Non-blocking ask. Raises ``asyncio.QueueFull`` if the inbox has no capacity.
+        Non-blocking ask. Raises `asyncio.QueueFull` if the inbox has no capacity.
 
         Returns a future that resolves to the reply once the actor processes it.
 

@@ -1,6 +1,6 @@
 """ControlFlow enum and CrashPolicy protocol.
 
-Kept in their own module so both ``actor.py`` and ``runtime.py`` can import
+Kept in their own module so both `actor.py` and `runtime.py` can import
 from here without creating a cycle.
 """
 
@@ -10,7 +10,7 @@ from typing import Protocol, runtime_checkable
 
 
 class ControlFlow(Enum):
-    """The decision an actor returns from ``on_panic``."""
+    """The decision an actor returns from `on_panic`."""
 
     Continue = "continue"
     Stop = "stop"
@@ -19,10 +19,10 @@ class ControlFlow(Enum):
 @runtime_checkable
 class CrashPolicy(Protocol):
     """
-    Observer called by the ``Runtime`` after every actor panic.
+    Observer called by the `Runtime` after every actor panic.
 
-    Receives the ``ControlFlow`` decision already made by the actor's own
-    ``on_panic``, so it is purely an observer — it cannot override that
+    Receives the `ControlFlow` decision already made by the actor's own
+    `on_panic`, so it is purely an observer — it cannot override that
     decision. Use it for logging, metrics, alerting, or trace capture.
     """
 

@@ -18,13 +18,13 @@ if TYPE_CHECKING:
 @final
 class Sender[M, R]:
     """
-    A handle that sends exactly one message type ``M`` and yields its reply ``R``.
+    A handle that sends exactly one message type `M` and yields its reply `R`.
 
-    Built by ``Message.sender`` from a ``Runtime`` and an ``ActorRef[A]``,
-    capturing a closure over ``runtime.ask`` while the ``M``/``A``/``R``
+    Built by `Message.sender` from a `Runtime` and an `ActorRef[A]`,
+    capturing a closure over `runtime.ask` while the `M`/`A`/`R`
     relationship is still known. Storing the closure rather than the ref lets
-    ``send`` stay fully type-safe: the actor type ``A`` does not need to leak
-    into ``Sender``'s parameters, yet no unsound cast is required.
+    `send` stay fully type-safe: the actor type `A` does not need to leak
+    into `Sender`'s parameters, yet no unsound cast is required.
     """
 
     def __init__(self, send: Callable[[M], Awaitable[R]]):
@@ -46,39 +46,39 @@ class Context[A: Actor]:
     async def tell[B: Actor, R](
         self, target: ActorRef[B], message: Message[B, R]
     ) -> None:
-        """Send ``message`` to ``target`` without waiting for a reply."""
+        """Send `message` to `target` without waiting for a reply."""
         await self._actor._runtime.tell(target, message)  # pyright: ignore[reportPrivateUsage]
 
     async def ask[B: Actor, R](self, target: ActorRef[B], message: Message[B, R]) -> R:
-        """Send ``message`` to ``target`` and wait for the reply."""
+        """Send `message` to `target` and wait for the reply."""
         return await self._actor._runtime.ask(target, message)  # pyright: ignore[reportPrivateUsage]
 
     def forward[B: Actor, R](self, target: ActorRef[B], message: Message[B, R]) -> R:
         """
-        Delegate this handler's reply to ``target``.
+        Delegate this handler's reply to `target`.
 
-        ``return`` (do **not** ``await``) the result from a ``dispatch`` handler
-        to hand the current ask's reply off to ``target``: ``message`` is sent to
-        ``target`` and *its* reply — value or exception — is delivered straight to
+        `return` (do **not** `await`) the result from a `dispatch` handler
+        to hand the current ask's reply off to `target`: `message` is sent to
+        `target` and *its* reply — value or exception — is delivered straight to
         the original caller's future. The delegating actor does not block waiting
         for that reply; it is free to process its next message immediately.
 
-        This returns an opaque proxy that the driver recognizes when ``dispatch``
-        returns. The declared ``-> R`` is a contained cast (the proxy is not
-        really an ``R``); it lets a handler ``return ctx.forward(...)`` while the
-        type checker still enforces that ``message``'s reply type matches the
-        handler's declared reply type ``R``.
+        This returns an opaque proxy that the driver recognizes when `dispatch`
+        returns. The declared `-> R` is a contained cast (the proxy is not
+        really an `R`); it lets a handler `return ctx.forward(...)` while the
+        type checker still enforces that `message`'s reply type matches the
+        handler's declared reply type `R`.
         """
         return cast(R, _Forward(target, message))
 
     async def _forward[B: Actor, R](
         self, fwd: _Forward[B, R], reply: Future[R] | None
     ) -> None:
-        """Carry out a ``forward`` directive returned from ``dispatch``.
+        """Carry out a `forward` directive returned from `dispatch`.
 
         Routes the forwarded send through the runtime (keeping it observable) and
-        links the target's reply future into the original caller's ``reply``.
-        Invoked by ``Responder.respond``; not part of the public handler API.
+        links the target's reply future into the original caller's `reply`.
+        Invoked by `Responder.respond`; not part of the public handler API.
         """
         runtime = self._actor._runtime  # pyright: ignore[reportPrivateUsage]
         if reply is None:
@@ -98,21 +98,21 @@ class Context[A: Actor]:
 
 class Message[A: Actor, R](ABC):
     """
-    The base class for the messages an ``Actor`` processes.
+    The base class for the messages an `Actor` processes.
 
-    A ``Message`` is a typed envelope: it names the actor type ``A`` it targets
-    and the reply type ``R`` it produces. Its ``dispatch`` method should hold
-    only routing — delegating to a method on ``A`` that owns the behavior and
+    A `Message` is a typed envelope: it names the actor type `A` it targets
+    and the reply type `R` it produces. Its `dispatch` method should hold
+    only routing — delegating to a method on `A` that owns the behavior and
     state — rather than the business logic itself.
     """
 
     @abstractmethod
     async def dispatch(self, actor: A, ctx: Context[A]) -> R:
         """
-        Route this message to its handler on ``actor`` and return the reply.
+        Route this message to its handler on `actor` and return the reply.
 
-        Keep this thin: call a method on ``actor`` that does the real work. The
-        result is checked against ``R``, so a handler whose return type doesn't
+        Keep this thin: call a method on `actor` that does the real work. The
+        result is checked against `R`, so a handler whose return type doesn't
         match the message's declared reply type is a type error right here.
         """
         ...
@@ -137,10 +137,10 @@ class Responder(Generic[A, R]):
 
     Due to variance rules, we have to control the generics for this type
     manually. This allows it to bind the message with its reply R during
-    construction, but allow type erasure as a ``Responder[A, object]`` so that it can
-    be placed in the actor's inbox. Since the inbox driver calls ``Responder.respond``,
-    we maintain the guarantee that the produced response is of type ``R``, even after
-    erasing ``R`` to ``object``.
+    construction, but allow type erasure as a `Responder[A, object]` so that it can
+    be placed in the actor's inbox. Since the inbox driver calls `Responder.respond`,
+    we maintain the guarantee that the produced response is of type `R`, even after
+    erasing `R` to `object`.
 
     It also controls the relationship between the message and the Future object,
     so that replies always go to the right client.
@@ -150,7 +150,7 @@ class Responder(Generic[A, R]):
         """
         Generate a responder for this message.
 
-        Call one of ``tell` or ``ask`` to chain configuration.
+        Call one of `tell` or `ask` to chain configuration.
 
         :param message: the message
         """
@@ -175,7 +175,7 @@ class Responder(Generic[A, R]):
         """
         Respond to this message.
 
-        :param actor: the actor whose state should be passed to ``Message.dispatch``
+        :param actor: the actor whose state should be passed to `Message.dispatch`
         :param ctx: the context
         """
         try:
@@ -195,7 +195,7 @@ class Responder(Generic[A, R]):
                 self._reply.set_result(response)
 
     def set_stopped(self) -> None:
-        """Resolve the reply future with ``ActorStoppedError`` (inbox drain helper)."""
+        """Resolve the reply future with `ActorStoppedError` (inbox drain helper)."""
         if self._reply is not None and not self._reply.done():
             self._reply.set_exception(ActorStoppedError())
 
@@ -205,9 +205,9 @@ class _Forward(Generic[A, R]):
     """
     An opaque directive returned from a handler to delegate its reply.
 
-    Carries the ``target`` and the ``message`` to send it. ``Context.forward``
-    constructs one (cast to the reply type ``R``); ``Responder.respond``
-    recognizes it and routes the handoff through ``Context._forward``. Users
+    Carries the `target` and the `message` to send it. `Context.forward`
+    constructs one (cast to the reply type `R`); `Responder.respond`
+    recognizes it and routes the handoff through `Context._forward`. Users
     never construct or name this type directly.
     """
 
@@ -217,7 +217,7 @@ class _Forward(Generic[A, R]):
 
 
 def _link_reply[T](source: Future[T], reply: Future[T]) -> None:
-    """Copy ``source``'s eventual result, exception, or cancellation into ``reply``."""
+    """Copy `source`'s eventual result, exception, or cancellation into `reply`."""
 
     def _on_done(done: Future[T]) -> None:
         if reply.done():

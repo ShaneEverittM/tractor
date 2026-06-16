@@ -1,4 +1,4 @@
-"""The definition of the ``ActorRef`` class, for interacting with ``Actor``s."""
+"""The definition of the `ActorRef` class, for interacting with `Actor`s."""
 
 from __future__ import annotations
 
@@ -32,11 +32,11 @@ def _get_default_runtime() -> RuntimeLike:
 @final
 class ActorRef[A: Actor]:
     """
-    An opaque address for an actor of type ``A``.
+    An opaque address for an actor of type `A`.
 
-    Use ``Runtime.ask`` / ``Runtime.tell`` to send messages from outside an actor.
-    Use ``ctx.ask`` / ``ctx.tell`` from inside a ``Message.dispatch`` handler.
-    ``ActorRef`` intentionally has no ``ask``/``tell`` methods so that every send
+    Use `Runtime.ask` / `Runtime.tell` to send messages from outside an actor.
+    Use `ctx.ask` / `ctx.tell` from inside a `Message.dispatch` handler.
+    `ActorRef` intentionally has no `ask`/`tell` methods so that every send
     is observable at the runtime level.
     """
 
@@ -48,13 +48,13 @@ class ActorRef[A: Actor]:
         runtime: RuntimeLike | None = None,
     ):
         """
-        Wrap an actor in an ``ActorRef``.
+        Wrap an actor in an `ActorRef`.
 
-        Prefer ``Runtime.spawn()`` over constructing this directly — it ensures
+        Prefer `Runtime.spawn()` over constructing this directly — it ensures
         the actor is registered with a runtime and its sends are observable.
 
         :param actor: the actor to wrap
-        :param capacity: inbox capacity (``None`` for unbounded)
+        :param capacity: inbox capacity (`None` for unbounded)
         :param runtime: the runtime to use; defaults to the module-level singleton
         """
         if runtime is None:

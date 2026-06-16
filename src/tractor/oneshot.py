@@ -1,13 +1,15 @@
 """A typed oneshot channel: one sender, one receiver, one value.
 
-Analogous to ``tokio::sync::oneshot`` — create a matched ``(sender, receiver)``
+Analogous to `tokio::sync::oneshot` — create a matched `(sender, receiver)`
 pair, hand each end to a different task, and the receiver blocks until the
-sender fires::
+sender fires:
 
-    tx, rx = oneshot(str)
-    ...
-    tx.send("done")    # sender side
-    result = await rx  # receiver side
+```python
+tx, rx = oneshot(str)
+...
+tx.send("done")    # sender side
+result = await rx  # receiver side
+```
 """
 
 from asyncio import Future, get_running_loop
@@ -16,7 +18,7 @@ from typing import final
 
 
 class DoubleSendError(RuntimeError):
-    """Raised if you call ``Sender.send`` twice."""
+    """Raised if you call `Sender.send` twice."""
 
     def __init__(self) -> None:
         super().__init__("Sender.send called twice")
@@ -24,7 +26,7 @@ class DoubleSendError(RuntimeError):
 
 @final
 class Sender[T]:
-    """Write end of a oneshot channel. Call ``send`` exactly once."""
+    """Write end of a oneshot channel. Call `send` exactly once."""
 
     __slots__ = ("_future", "_sent")
 
@@ -50,7 +52,7 @@ class Sender[T]:
 
 @final
 class Receiver[T]:
-    """Read end of a oneshot channel. ``await`` it to block until the sender fires."""
+    """Read end of a oneshot channel. `await` it to block until the sender fires."""
 
     __slots__ = ("_future",)
 
@@ -62,7 +64,7 @@ class Receiver[T]:
 
 
 def oneshot[T](_: type[T]) -> tuple[Sender[T], Receiver[T]]:
-    """Return a matched ``(sender, receiver)`` pair."""
+    """Return a matched `(sender, receiver)` pair."""
     future: Future[T] = get_running_loop().create_future()
     return Sender(future), Receiver(future)
 
