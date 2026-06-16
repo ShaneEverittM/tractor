@@ -21,11 +21,9 @@ uv run pyrefly check          # type check (the authoritative checker — see be
 Always run `pyrefly check` before considering a change done — type correctness
 is part of this library's contract.
 
-**Benign warning:** `uv run` prints
-`Using incompatible environment (.venv) due to --no-sync` because this repo uses
-a nix flake dev env (`.envrc` = `use flake`); uv's `.venv` differs from the
-nix-provided Python and it falls back gracefully. Commands work correctly — do
-not try to "fix" this.
+This repo uses a nix flake dev env (`.envrc` = `use flake`). The flake points
+uv at the Nix-built virtualenv (`UV_PROJECT_ENVIRONMENT` / `VIRTUAL_ENV`), so
+`uv run` uses it directly and ignores any stray repo-local `.venv`.
 
 ## Hard constraints
 

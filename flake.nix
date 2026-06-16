@@ -169,6 +169,12 @@
               UV_NO_SYNC = "1";
               UV_PYTHON = "${virtualenv}/bin/python";
               UV_PYTHON_DOWNLOADS = "never";
+              # Point uv (and tools) at the Nix venv as *the* project
+              # environment so `uv run` uses it directly instead of the repo's
+              # stray `.venv`, which otherwise triggers an incompatible-environment
+              # warning under UV_NO_SYNC.
+              UV_PROJECT_ENVIRONMENT = "${virtualenv}";
+              VIRTUAL_ENV = "${virtualenv}";
             };
 
             shellHook = ''
