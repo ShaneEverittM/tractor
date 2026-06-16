@@ -81,6 +81,8 @@
               root = ./.;
               fileset = lib.fileset.unions [
                 ./pyproject.toml
+                ./README.md
+                ./LICENSE
                 ./src
               ];
             };
@@ -140,6 +142,8 @@
                     root = old.src;
                     fileset = lib.fileset.unions [
                       (old.src + "/pyproject.toml")
+                      (old.src + "/README.md")
+                      (old.src + "/LICENSE")
                       (old.src + "/src")
                     ];
                   };
