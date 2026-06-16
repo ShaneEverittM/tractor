@@ -175,11 +175,24 @@
               # warning under UV_NO_SYNC.
               UV_PROJECT_ENVIRONMENT = "${virtualenv}";
               VIRTUAL_ENV = "${virtualenv}";
+              # Short label for venv-aware prompts (Warp, etc.) instead of the
+              # long /nix/store/<hash>-tractor-dev-env basename.
+              VIRTUAL_ENV_PROMPT = "tractor";
             };
 
             shellHook = ''
               unset PYTHONPATH
               export REPO_ROOT=$(git rev-parse --show-toplevel)
+
+              # Warpify this subshell: when entered via `nix develop` inside Warp,
+              # emit the bootstrap escape so Warp re-runs its shell integration
+              # (blocks, completions, prompt) in the subshell. `nix develop`
+              # launches bash, so we advertise bash. Guarded to fire only in an
+              # interactive subshell on a TTY — never during `direnv use flake`,
+              # which loads this env into the already-Warp-native parent zsh.
+              if [ "$TERM_PROGRAM" = "WarpTerminal" ] && [ -t 1 ] && case "$-" in *i*) true ;; *) false ;; esac; then
+                printf '\eP$f{"hook": "SourcedRcFileForWarp", "value": { "shell": "bash" }}\x9c'
+              fi
             '';
           };
         }
