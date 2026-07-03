@@ -27,19 +27,15 @@ class Inbox[A: Actor](Queue[Responder[A, object]]):
         """
         super().__init__(maxsize=capacity if capacity is not None else 0)
 
-    async def ask[R](
-        self, message: Message[A, R], timeout: float | None = None
-    ) -> Future[R]:
+    async def ask[R](self, message: Message[A, R]) -> Future[R]:
         """
         Enqueue a message, waiting for capacity and its reply.
 
         :param message: the message to enqueue
-        :param timeout: how long to wait for capacity in the queue
         :return: a future that will resolve to the reply
         """
         responder, handle = Responder(message).ask()
-        put = self.put(responder)
-        await asyncio.wait_for(put, timeout)
+        await self.put(responder)
         return handle
 
     def try_ask[R](self, message: Message[A, R]) -> Future[R]:
