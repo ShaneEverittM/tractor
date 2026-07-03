@@ -25,7 +25,6 @@
 
   outputs =
     {
-      self,
       nixpkgs,
       uv2nix,
       pyproject-nix,
@@ -118,73 +117,6 @@
         {
           default = dist;
           dist = dist;
-        }
-      );
-
-      # Pure dev shell: uv2nix builds the venv (incl. dev group) from the lock,
-      # tractor installed editable so src/ edits are live.
-      devShells = forAllSystems (
-        system:
-        let
-          pkgs = nixpkgs.legacyPackages.${system};
-          pythonSet = pythonSetFor system;
-
-          editableOverlay = workspace.mkEditablePyprojectOverlay {
-            root = "$REPO_ROOT";
-          };
-
-          editablePythonSet = pythonSet.overrideScope (
-            lib.composeManyExtensions [
-              editableOverlay
-              (final: prev: {
-                tractor = prev.tractor.overrideAttrs (old: {
-                  src = lib.fileset.toSource {
-                    root = old.src;
-                    fileset = lib.fileset.unions [
-                      (old.src + "/pyproject.toml")
-                      (old.src + "/README.md")
-                      (old.src + "/LICENSE")
-                      (old.src + "/src")
-                    ];
-                  };
-                  nativeBuildInputs =
-                    old.nativeBuildInputs
-                    ++ final.resolveBuildSystem { editables = [ ]; };
-                });
-              })
-            ]
-          );
-
-          virtualenv = editablePythonSet.mkVirtualEnv "tractor-dev-env" workspace.deps.all;
-        in
-        {
-          default = pkgs.mkShell {
-            packages = [
-              virtualenv
-              pkgs.uv
-            ];
-
-            env = {
-              # Don't let uv touch the Nix-managed environment.
-              UV_NO_SYNC = "1";
-              UV_PYTHON = "${virtualenv}/bin/python";
-              UV_PYTHON_DOWNLOADS = "never";
-              # Point uv (and tools) at the Nix venv as *the* project
-              # environment so `uv run` uses it directly instead of the repo's
-              # stray `.venv`, which otherwise triggers an incompatible-environment
-              # warning under UV_NO_SYNC.
-              UV_PROJECT_ENVIRONMENT = "${virtualenv}";
-              VIRTUAL_ENV = "${virtualenv}";
-              # Short label for venv-aware prompts (Warp, etc.) instead of the
-              # long /nix/store/<hash>-tractor-dev-env basename.
-              VIRTUAL_ENV_PROMPT = "tractor";
-            };
-
-            shellHook = ''
-              unset PYTHONPATH
-              export REPO_ROOT=$(git rev-parse --show-toplevel)
-            '';
-          };
         }
       );
     };

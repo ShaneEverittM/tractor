@@ -5,12 +5,12 @@ from asyncio import FIRST_COMPLETED, Future, Task
 from collections import deque
 from collections.abc import Awaitable, Callable, Generator
 from dataclasses import dataclass
-from typing import override, final
+from typing import final, override
 
 from tractor import Actor, Message
+from tractor.combinators import first
 from tractor.handles import InboxHandle, ResponderHandle
 from tractor.message import Context, TellSender
-from tractor.select import first
 
 
 @final

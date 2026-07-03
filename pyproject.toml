@@ -38,17 +38,22 @@ Issues = "https://github.com/ShaneEverittM/tractor/issues"
 
 [dependency-groups]
 dev = [
-    "pyrefly>=1.0.0",
-    "pytest>=9.1.0",
-    "pytest-asyncio>=1.4.0",
-    "ruff>=0.15.17",
+    "basedpyright>=1.39,<2",
+    "pyrefly>=1.0.0,<2",
+    "pytest>=9.1.0,<10",
+    "pytest-asyncio>=1.4.0,<2",
+    "ruff~=0.15.17",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 
+[tool.basedpyright]
+include = ["src", "examples", "tests"]
+reportImportCycles = false
+
 [tool.pyrefly]
-project-includes = ["src", "tests"]
+project-includes = ["src", "tests", "examples"]
 preset = "strict"
 strict-callable-subtyping = true
 enabled-ignores = ["type", "pyrefly", "pyright"]

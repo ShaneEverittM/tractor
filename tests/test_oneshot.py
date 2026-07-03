@@ -42,5 +42,5 @@ async def test_sender_from_another_task():
         await asyncio.sleep(0)
         sender.send("from task")
 
-    asyncio.create_task(producer(tx))
+    _ = asyncio.create_task(producer(tx))
     assert await rx == "from task"

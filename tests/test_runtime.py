@@ -339,28 +339,36 @@ async def test_context_tell():
     await receiver_ref.stop()
 
 
+# ---------------------------------------------------------------------------
+# Reply delegation — actors shared by the ctx.ask and ctx.forward tests
+# ---------------------------------------------------------------------------
+
+
+@final
+class Adder(Actor):
+    async def add(self, a: int, b: int) -> int:
+        return a + b
+
+
+@final
+@dataclass
+class Add(Message[Adder, int]):
+    a: int
+    b: int
+
+    @override
+    async def dispatch(self, actor: Adder, ctx: Context[Adder]) -> int:
+        return await actor.add(self.a, self.b)
+
+
+@final
+class Delegator(Actor):
+    def __init__(self, adder: ActorRef[Adder]):
+        self.adder = adder
+
+
 async def test_context_ask():
     """A handler can query another actor via ctx.ask."""
-
-    @final
-    class Adder(Actor):
-        async def add(self, a: int, b: int) -> int:
-            return a + b
-
-    @final
-    @dataclass
-    class Add(Message[Adder, int]):
-        a: int
-        b: int
-
-        @override
-        async def dispatch(self, actor: Adder, ctx: Context[Adder]) -> int:
-            return await actor.add(self.a, self.b)
-
-    @final
-    class Delegator(Actor):
-        def __init__(self, adder: ActorRef[Adder]):
-            self.adder = adder
 
     @final
     @dataclass
@@ -386,29 +394,6 @@ async def test_context_ask():
 # ---------------------------------------------------------------------------
 # Forwarding (reply delegation)
 # ---------------------------------------------------------------------------
-
-
-@final
-class Adder(Actor):
-    async def add(self, a: int, b: int) -> int:
-        return a + b
-
-
-@final
-@dataclass
-class Add(Message[Adder, int]):
-    a: int
-    b: int
-
-    @override
-    async def dispatch(self, actor: Adder, ctx: Context[Adder]) -> int:
-        return await actor.add(self.a, self.b)
-
-
-@final
-class Delegator(Actor):
-    def __init__(self, adder: ActorRef[Adder]):
-        self.adder = adder
 
 
 @final
@@ -530,7 +515,7 @@ async def test_forward_propagates_exception():
     front_ref = runtime.spawn(Front(boomer_ref))
 
     with pytest.raises(ValueError, match="downstream boom"):
-        await runtime.ask(front_ref, FrontMsg())
+        _ = await runtime.ask(front_ref, FrontMsg())
 
     await front_ref.stop()
     await boomer_ref.stop()

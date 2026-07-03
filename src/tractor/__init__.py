@@ -11,14 +11,20 @@ deliberately left namespaced rather than flattened into this module:
 """
 
 from tractor.actor import Actor
+from tractor.combinators import Sel0, Sel1, Sel2, Sel3, Sel4, Sel5, first, select
 from tractor.control_flow import ControlFlow, CrashPolicy, LogCrashPolicy
+from tractor.decorators import (
+    HandlerFactory,
+    HandlerMessage,
+    handler,
+    main,
+)
 from tractor.errors import ActorStoppedError
 from tractor.handles import InboxHandle, ResponderHandle
 from tractor.message import Context, Message, Responder, Sender, TellSender
 from tractor.protocols import MessagePort
 from tractor.ref import ActorRef
 from tractor.runtime import Runtime
-from tractor.select import Sel0, Sel1, Sel2, Sel3, Sel4, Sel5, first, select
 
 __all__ = [
     "Actor",
@@ -27,6 +33,8 @@ __all__ = [
     "Context",
     "ControlFlow",
     "CrashPolicy",
+    "HandlerFactory",
+    "HandlerMessage",
     "InboxHandle",
     "LogCrashPolicy",
     "Message",
@@ -43,5 +51,7 @@ __all__ = [
     "Sender",
     "TellSender",
     "first",
+    "handler",
+    "main",
     "select",
 ]

@@ -15,6 +15,7 @@ from typing import final, override
 
 from tractor import (
     Actor,
+    ActorRef,
     Context,
     InboxHandle,
     Message,
@@ -25,7 +26,6 @@ from tractor import (
     TellSender,
     select,
 )
-
 
 # ---------------------------------------------------------------------------
 # Actors
@@ -153,31 +153,29 @@ class Publish(Message[Hub, None]):
 async def main() -> None:
     runtime = Runtime()
 
-    logger_ref = runtime.spawn(Logger())
-    alice_ref = runtime.spawn(Listener("Alice"))
-    bob_ref = runtime.spawn(Listener("Bob"))
+    logger: ActorRef[Logger] = runtime.spawn(Logger())
+    alice: ActorRef[Listener] = runtime.spawn(Listener("Alice"))
+    bob: ActorRef[Listener] = runtime.spawn(Listener("Bob"))
 
-    hub_ref = runtime.spawn(Hub(logger=LogEvent.teller(runtime, logger_ref)))
+    hub: ActorRef[Hub] = runtime.spawn(Hub(logger=LogEvent.teller(runtime, logger)))
 
-    await runtime.tell(hub_ref, Subscribe(Event.teller(runtime, alice_ref)))
-    await runtime.tell(hub_ref, Subscribe(Event.teller(runtime, bob_ref)))
+    await runtime.tell(hub, Subscribe(Event.teller(runtime, alice)))
+    await runtime.tell(hub, Subscribe(Event.teller(runtime, bob)))
 
     print("--- publishing ---")
     for i in range(4):
-        await runtime.tell(hub_ref, Publish(f"event-{i}"))
+        await runtime.tell(hub, Publish(f"event-{i}"))
         await asyncio.sleep(0.1)
 
     print("--- idle (waiting for Logger heartbeat) ---")
     await asyncio.sleep(0.7)
 
-    alice_events = await runtime.ask(alice_ref, Snapshot())
-    bob_events = await runtime.ask(bob_ref, Snapshot())
+    alice_events = await runtime.ask(alice, Snapshot())
+    bob_events = await runtime.ask(bob, Snapshot())
     print(f"\nAlice received: {alice_events}")
     print(f"Bob received:   {bob_events}")
 
-    _ = await asyncio.gather(
-        hub_ref.stop(), logger_ref.stop(), alice_ref.stop(), bob_ref.stop()
-    )
+    _ = await asyncio.gather(hub.stop(), logger.stop(), alice.stop(), bob.stop())
 
 
 if __name__ == "__main__":

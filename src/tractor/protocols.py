@@ -52,7 +52,7 @@ class MessagePort(ABC):
     ) -> None: ...
 
 
-class RuntimeLike(MessagePort):
+class RuntimeLike(MessagePort, ABC):
     """The subset of `Runtime` that `ActorRef` and `Message` depend on.
 
     `Runtime` is the only implementation; depending on this interface
