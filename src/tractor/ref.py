@@ -71,6 +71,9 @@ class ActorRef[A: Actor]:
             except CancelledError:
                 raise
             except BaseException as exc:
+                # A startup panic is always terminal: on_panic and the crash
+                # policy still observe it, but a Continue cannot override the
+                # stop — there is no running state to continue into.
                 flow = await self._actor.on_panic(exc)
                 self._runtime.notify_crash(self._actor, exc, flow)
                 return  # on_stop still called from outer finally
