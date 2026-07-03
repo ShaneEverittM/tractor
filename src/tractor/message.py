@@ -116,10 +116,10 @@ class Context[A: Actor](MessagePort):
         runtime = self._actor._runtime  # pyright: ignore[reportPrivateUsage]
         if reply is None:
             # The original ask was a tell: just deliver the forwarded message.
-            await runtime.tell(fwd._target, fwd._message)
+            await runtime.tell(fwd._target, fwd._message)  # pyright: ignore[reportPrivateUsage]
             return
         try:
-            source = await runtime.forward(fwd._target, fwd._message)
+            source = await runtime.forward(fwd._target, fwd._message)  # pyright: ignore[reportPrivateUsage]
         except BaseException as exc:
             # Forwarding to a stopped/full target must not crash this actor; the
             # original caller sees the failure instead.
@@ -247,9 +247,13 @@ class Responder(Generic[A, R]):
         else:
             if isinstance(response, _Forward):
                 # The handler delegated its reply; hand it off rather than
-                # resolving the caller's future with the proxy itself.
+                # resolving the caller's future with the proxy itself. The
+                # cast undoes the one in `Context.forward`, which is the only
+                # place a `_Forward` can enter a dispatch's return value — its
+                # reply type is guaranteed there to be the handler's `R`.
+                fwd = cast("_Forward[Actor, R]", response)
                 reply, self._reply = self._reply, None
-                await ctx._forward(response, reply)
+                await ctx._forward(fwd, reply)  # pyright: ignore[reportPrivateUsage]
                 return
             if self._reply is not None and not self._reply.done():
                 self._reply.set_result(response)
