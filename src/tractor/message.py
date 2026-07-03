@@ -1,13 +1,13 @@
 from abc import ABC, abstractmethod
 from asyncio import CancelledError, Future
 from collections.abc import Awaitable, Callable
-from typing import Generic, Self, TypeVar, cast, final, TYPE_CHECKING
+from typing import TYPE_CHECKING, Generic, Self, TypeVar, cast, final, override
 
 from tractor.actor import Actor
 from tractor.errors import ActorStoppedError
+from tractor.protocols import MessagePort
 
 if TYPE_CHECKING:
-    from tractor.protocols import RuntimeLike
     from tractor.ref import ActorRef
 
 
@@ -20,11 +20,16 @@ class Sender[M, R]:
     """
     A handle that sends exactly one message type `M` and yields its reply `R`.
 
-    Built by `Message.sender` from a `Runtime` and an `ActorRef[A]`,
-    capturing a closure over `runtime.ask` while the `M`/`A`/`R`
+    Built by `Message.sender` from a `MessagePort` and an `ActorRef[A]`,
+    capturing a closure over the port's `ask` while the `M`/`A`/`R`
     relationship is still known. Storing the closure rather than the ref lets
     `send` stay fully type-safe: the actor type `A` does not need to leak
     into `Sender`'s parameters, yet no unsound cast is required.
+
+    `send` awaits the full round trip — it returns only once the recipient
+    has processed the message. Where waiting would couple your progress to
+    the recipient's (completion notifications, fan-out), use the
+    tell-flavored `TellSender` instead.
     """
 
     def __init__(self, send: Callable[[M], Awaitable[R]]):
@@ -35,7 +40,33 @@ class Sender[M, R]:
 
 
 @final
-class Context[A: Actor]:
+class TellSender[M]:
+    """
+    A handle that sends exactly one message type `M` without awaiting replies.
+
+    The tell-flavored counterpart to `Sender`, built by `Message.teller`:
+    `send` returns once the message is *enqueued*, not once it is processed,
+    so a slow or busy recipient never blocks the sending side.
+    """
+
+    def __init__(self, send: Callable[[M], Awaitable[None]]):
+        self._send = send
+
+    async def send(self, message: M) -> None:
+        await self._send(message)
+
+
+@final
+class Context[A: Actor](MessagePort):
+    """
+    The handler-side view of the runtime, passed into every `dispatch`.
+
+    Sends made through it (`tell` / `ask` / `forward`) route to the `Runtime`
+    with sender identity implicit from the context. As a `MessagePort`, it
+    can also back `Message.sender` / `Message.teller` handles built inside a
+    handler.
+    """
+
     def __init__(self, actor: ActorRef[A]):
         self._actor = actor
 
@@ -43,12 +74,14 @@ class Context[A: Actor]:
     def ref(self) -> ActorRef[A]:
         return self._actor
 
+    @override
     async def tell[B: Actor, R](
         self, target: ActorRef[B], message: Message[B, R]
     ) -> None:
         """Send `message` to `target` without waiting for a reply."""
         await self._actor._runtime.tell(target, message)  # pyright: ignore[reportPrivateUsage]
 
+    @override
     async def ask[B: Actor, R](self, target: ActorRef[B], message: Message[B, R]) -> R:
         """Send `message` to `target` and wait for the reply."""
         return await self._actor._runtime.ask(target, message)  # pyright: ignore[reportPrivateUsage]
@@ -118,8 +151,27 @@ class Message[A: Actor, R](ABC):
         ...
 
     @classmethod
-    def sender(cls, runtime: RuntimeLike, ref: ActorRef[A]) -> Sender[Self, R]:
-        return Sender(lambda msg: runtime.ask(ref, msg))
+    def sender(cls, port: MessagePort, ref: ActorRef[A]) -> Sender[Self, R]:
+        """
+        Build an ask-flavored send handle for this message type, aimed at `ref`.
+
+        `port` is whatever the send should be routed through: the `Runtime`
+        when building from the outside, or the handler's `Context` when
+        building inside an actor — the latter keeps the send attributed to
+        the sending actor.
+        """
+        return Sender(lambda msg: port.ask(ref, msg))
+
+    @classmethod
+    def teller(cls, port: MessagePort, ref: ActorRef[A]) -> TellSender[Self]:
+        """
+        Build a tell-flavored send handle for this message type, aimed at `ref`.
+
+        Like `sender`, but the handle's `send` returns as soon as the message
+        is enqueued instead of waiting for the reply. `port` is the `Runtime`
+        or, inside a handler, the `Context` (which keeps sender attribution).
+        """
+        return TellSender(lambda msg: port.tell(ref, msg))
 
     def responder(self) -> Responder[A, R]:
         """Get the responder for this message."""
@@ -242,4 +294,4 @@ def _link_reply[T](source: Future[T], reply: Future[T]) -> None:
     source.add_done_callback(_on_done)
 
 
-__all__ = ["Message", "Responder", "Sender", "Context"]
+__all__ = ["Message", "Responder", "Sender", "TellSender", "Context"]

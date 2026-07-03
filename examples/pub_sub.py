@@ -3,7 +3,8 @@ pub_sub.py — a small pub/sub example for tractor.
 
 Demonstrates:
   - Message[A, R] with tell (R=None) and ask (R=data)
-  - ctx.tell for actor-to-actor fanout inside a handler
+  - TellSender fanout inside a handler — enqueue-only, so one slow
+    listener never delays the rest
   - on_start / on_stop lifecycle hooks
   - Actor.step override with select for a periodic heartbeat
 """
@@ -12,7 +13,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import final, override
 
-from tractor import Actor, InboxHandle, Message, ResponderHandle, Runtime, Sender
+from tractor import Actor, InboxHandle, Message, ResponderHandle, Runtime, TellSender
 from tractor.message import Context
 from tractor.select import Sel0, Sel1, select
 
@@ -71,14 +72,16 @@ class Logger(Actor):
 class Hub(Actor):
     """Maintains a subscriber list and fans out published events."""
 
-    def __init__(self, logger: "Sender[LogEvent, None] | None" = None) -> None:
-        self._subscribers: list[Sender[Event, None]] = []
+    def __init__(self, logger: "TellSender[LogEvent] | None" = None) -> None:
+        self._subscribers: list[TellSender[Event]] = []
         self._logger = logger
 
-    async def subscribe(self, sender: "Sender[Event, None]") -> None:
+    async def subscribe(self, sender: "TellSender[Event]") -> None:
         self._subscribers.append(sender)
 
     async def publish(self, text: str) -> None:
+        # Tell-flavored senders only enqueue, so one slow listener never
+        # delays the rest of the fanout.
         for sender in self._subscribers:
             await sender.send(Event(text))
         if self._logger is not None:
@@ -117,7 +120,7 @@ class LogEvent(Message[Logger, None]):
 
 @dataclass
 class Subscribe(Message[Hub, None]):
-    sink: Sender[Event, None]
+    sink: TellSender[Event]
 
     @override
     async def dispatch(self, actor: Hub, ctx: Context[Hub]) -> None:
@@ -145,10 +148,10 @@ async def main() -> None:
     alice_ref = runtime.spawn(Listener("Alice"))
     bob_ref = runtime.spawn(Listener("Bob"))
 
-    hub_ref = runtime.spawn(Hub(logger=LogEvent.sender(runtime, logger_ref)))
+    hub_ref = runtime.spawn(Hub(logger=LogEvent.teller(runtime, logger_ref)))
 
-    await runtime.tell(hub_ref, Subscribe(Event.sender(runtime, alice_ref)))
-    await runtime.tell(hub_ref, Subscribe(Event.sender(runtime, bob_ref)))
+    await runtime.tell(hub_ref, Subscribe(Event.teller(runtime, alice_ref)))
+    await runtime.tell(hub_ref, Subscribe(Event.teller(runtime, bob_ref)))
 
     print("--- publishing ---")
     for i in range(4):

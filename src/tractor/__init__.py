@@ -4,7 +4,7 @@ from tractor.actor import Actor
 from tractor.control_flow import ControlFlow, CrashPolicy
 from tractor.errors import ActorStoppedError
 from tractor.handles import InboxHandle, ResponderHandle
-from tractor.message import Message, Responder, Sender
+from tractor.message import Message, Responder, Sender, TellSender
 from tractor.ref import ActorRef
 from tractor.runtime import Runtime
 
@@ -20,4 +20,5 @@ __all__ = [
     "ResponderHandle",
     "Runtime",
     "Sender",
+    "TellSender",
 ]

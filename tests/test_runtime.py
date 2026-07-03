@@ -592,6 +592,68 @@ async def test_forward_chain():
     await adder_ref.stop()
 
 
+async def test_teller_send_returns_on_enqueue():
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    @final
+    class Slow(Actor):
+        @staticmethod
+        async def handle() -> None:
+            started.set()
+            _ = await release.wait()
+
+    @final
+    @dataclass
+    class SlowMsg(Message[Slow, None]):
+        @override
+        async def dispatch(self, actor: Slow, ctx: Context[Slow]) -> None:
+            await actor.handle()
+
+    runtime = Runtime()
+    ref = runtime.spawn(Slow())
+    teller = SlowMsg.teller(runtime, ref)
+
+    # Both sends return once enqueued: the first is still being processed
+    # (parked on `release`) when the second goes out.
+    async with asyncio.timeout(1):
+        await teller.send(SlowMsg())
+        _ = await started.wait()
+        await teller.send(SlowMsg())
+
+    release.set()
+    await ref.stop()
+
+
+async def test_senders_built_from_context():
+    @final
+    class Relay(Actor):
+        pass
+
+    @final
+    @dataclass
+    class RelayMsg(Message[Relay, int]):
+        target: ActorRef[Echo]
+        value: int
+
+        @override
+        async def dispatch(self, actor: Relay, ctx: Context[Relay]) -> int:
+            # A handler's ctx is a MessagePort too, so senders built inside
+            # an actor route through it (keeping sender attribution).
+            _ = EchoMsg.teller(ctx, self.target)  # constructible from ctx
+            sender = EchoMsg.sender(ctx, self.target)
+            return await sender.send(EchoMsg(self.value))
+
+    runtime = Runtime()
+    echo_ref = runtime.spawn(Echo())
+    relay_ref = runtime.spawn(Relay())
+
+    assert await runtime.ask(relay_ref, RelayMsg(echo_ref, 5)) == 5
+
+    await relay_ref.stop()
+    await echo_ref.stop()
+
+
 async def test_default_runtime_backward_compat():
     """ActorRef(actor) without a runtime argument still works."""
     from tractor.ref import _get_default_runtime  # pyright: ignore[reportPrivateUsage]
