@@ -1,5 +1,9 @@
 # tractor
 
+> [!WARNING]
+> **Pre-release.** This is an early prototype: APIs are unstable and will change
+> without notice, and there are no published releases yet.
+
 A simple, modern, type-safe actor framework for asynchronous, fault-tolerant systems.
 
 tractor gives you isolated, single-threaded **actors** that communicate only by
@@ -28,10 +32,14 @@ and what it replies with — no `Any`, no string dispatch.
 
 ## Installation
 
+Not yet published to PyPI (note that the `tractor` name on PyPI currently
+belongs to an unrelated project — do not `pip install tractor` expecting this
+library). For now, install from source:
+
 ```bash
-pip install tractor
+uv add git+https://github.com/ShaneEverittM/tractor
 # or
-uv add tractor
+pip install git+https://github.com/ShaneEverittM/tractor
 ```
 
 ## Quick start
