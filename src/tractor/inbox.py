@@ -2,9 +2,10 @@
 
 import asyncio
 from asyncio import Future, Queue
-from typing import final
+from typing import final, override
 
 from tractor.actor import Actor
+from tractor.errors import ActorStoppedError
 from tractor.message import Message, Responder
 
 
@@ -15,6 +16,12 @@ class Inbox[A: Actor](Queue[Responder[A, object]]):
 
     This is a specialization of `asyncio.Queue` with methods
     that enqueue and create replies atomically.
+
+    Enqueueing into a shut-down inbox means the actor has stopped, so the
+    `put` overrides translate `asyncio.QueueShutDown` — an internal detail of
+    the queue — into `ActorStoppedError`, the exception callers are told to
+    expect. Every send path (`ask`, `tell`, and the `try_*` variants) funnels
+    through one of them.
     """
 
     def __init__(self, capacity: int | None = None):
@@ -27,19 +34,41 @@ class Inbox[A: Actor](Queue[Responder[A, object]]):
         """
         super().__init__(maxsize=capacity if capacity is not None else 0)
 
-    async def ask[R](
-        self, message: Message[A, R], timeout: float | None = None
-    ) -> Future[R]:
+    @override
+    async def put(self, item: Responder[A, object]) -> None:
+        """
+        Enqueue `item`, waiting for capacity.
+
+        :raises ActorStoppedError: if the actor has stopped
+        """
+        try:
+            await super().put(item)
+        except asyncio.QueueShutDown:
+            raise ActorStoppedError() from None
+
+    @override
+    def put_nowait(self, item: Responder[A, object]) -> None:
+        """
+        Enqueue `item` if capacity is available now.
+
+        :raises QueueFull: if no capacity is available
+        :raises ActorStoppedError: if the actor has stopped
+        """
+        try:
+            super().put_nowait(item)
+        except asyncio.QueueShutDown:
+            raise ActorStoppedError() from None
+
+    async def ask[R](self, message: Message[A, R]) -> Future[R]:
         """
         Enqueue a message, waiting for capacity and its reply.
 
         :param message: the message to enqueue
-        :param timeout: how long to wait for capacity in the queue
         :return: a future that will resolve to the reply
+        :raises ActorStoppedError: if the actor has stopped
         """
         responder, handle = Responder(message).ask()
-        put = self.put(responder)
-        await asyncio.wait_for(put, timeout)
+        await self.put(responder)
         return handle
 
     def try_ask[R](self, message: Message[A, R]) -> Future[R]:
@@ -49,6 +78,7 @@ class Inbox[A: Actor](Queue[Responder[A, object]]):
         :param message: the message to enqueue
         :return: a future that will resolve to the reply
         :raises QueueFull: if no capacity is available
+        :raises ActorStoppedError: if the actor has stopped
         """
         responder, reply = Responder(message).ask()
         self.put_nowait(responder)
@@ -59,6 +89,7 @@ class Inbox[A: Actor](Queue[Responder[A, object]]):
         Enqueue a message, waiting for capacity.
 
         :param message: the message to enqueue
+        :raises ActorStoppedError: if the actor has stopped
         """
         responder = Responder(message).tell()
         await self.put(responder)
@@ -69,6 +100,7 @@ class Inbox[A: Actor](Queue[Responder[A, object]]):
 
         :param message: the message to enqueue
         :raises QueueFull: if no capacity is available
+        :raises ActorStoppedError: if the actor has stopped
         """
         responder = Responder(message).tell()
         self.put_nowait(responder)

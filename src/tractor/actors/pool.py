@@ -9,7 +9,7 @@ from typing import override, final
 
 from tractor import Actor, Message
 from tractor.handles import InboxHandle, ResponderHandle
-from tractor.message import Context, Sender
+from tractor.message import Context, TellSender
 from tractor.select import first
 
 
@@ -214,16 +214,18 @@ class _Submission[M]:
         self,
         task: Callable[[], Awaitable[None]],
         message: M,
-        sender: Sender[M, None],
+        sender: TellSender[M],
     ):
         """
         :param task: a factory producing the work to run on the pool
         :param message: the message to deliver once the work finishes
-        :param sender: the sender that delivers `message`
+        :param sender: the tell-flavored sender that delivers `message`;
+            tell semantics keep the pool live — the notification only
+            enqueues, so a slow recipient cannot stall the pool's driver
         """
         self._task: Callable[[], Awaitable[None]] = task
         self._message: M = message
-        self._sender: Sender[M, None] = sender
+        self._sender: TellSender[M] = sender
 
     def _notify(self) -> Awaitable[None]:
         """Produce the completion notification (invoked only if the task runs)."""
