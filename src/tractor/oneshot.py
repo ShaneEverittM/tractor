@@ -5,11 +5,18 @@ pair, hand each end to a different task, and the receiver blocks until the
 sender fires:
 
 ```python
-tx, rx = oneshot(str)
+from tractor import oneshot
+
+tx, rx = oneshot.channel(str)
 ...
 tx.send("done")    # sender side
 result = await rx  # receiver side
 ```
+
+Like its tokio namesake, this module is meant to be used *as a namespace*:
+`Sender` and `Receiver` here are channel ends, distinct from the
+message-sending `tractor.Sender` / `tractor.TellSender`, so they are not
+re-exported at the package top level — `oneshot.Sender` keeps the two apart.
 """
 
 from asyncio import Future, get_running_loop
@@ -63,10 +70,10 @@ class Receiver[T]:
         return self._future.__await__()
 
 
-def oneshot[T](_: type[T]) -> tuple[Sender[T], Receiver[T]]:
+def channel[T](_: type[T]) -> tuple[Sender[T], Receiver[T]]:
     """Return a matched `(sender, receiver)` pair."""
     future: Future[T] = get_running_loop().create_future()
     return Sender(future), Receiver(future)
 
 
-__all__ = ["oneshot", "Sender", "Receiver"]
+__all__ = ["channel", "Sender", "Receiver"]

@@ -3,25 +3,25 @@ from asyncio import Future
 
 import pytest
 
-from tractor.oneshot import oneshot, Sender
-from tractor.select import select, Sel0
+from tractor import Sel0, select
+from tractor import oneshot
 
 
 async def test_basic_send_and_receive():
-    tx, rx = oneshot(str)
+    tx, rx = oneshot.channel(str)
     tx.send("hello")
     assert await rx == "hello"
 
 
 async def test_send_error_raises_on_receive():
-    tx, rx = oneshot(str)
+    tx, rx = oneshot.channel(str)
     tx.send(ValueError("boom"))
     with pytest.raises(ValueError, match="boom"):
         await rx
 
 
 async def test_receiver_works_with_select():
-    tx, rx = oneshot(int)
+    tx, rx = oneshot.channel(int)
     tx.send(42)
 
     never: Future[int] = asyncio.get_running_loop().create_future()
@@ -36,9 +36,9 @@ async def test_receiver_works_with_select():
 
 
 async def test_sender_from_another_task():
-    tx, rx = oneshot(str)
+    tx, rx = oneshot.channel(str)
 
-    async def producer(sender: Sender[str]) -> None:
+    async def producer(sender: oneshot.Sender[str]) -> None:
         await asyncio.sleep(0)
         sender.send("from task")
 

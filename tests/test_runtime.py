@@ -4,8 +4,15 @@ from typing import final, override
 
 import pytest
 
-from tractor import Actor, ActorRef, ActorStoppedError, ControlFlow, Message, Runtime
-from tractor.message import Context
+from tractor import (
+    Actor,
+    ActorRef,
+    ActorStoppedError,
+    Context,
+    ControlFlow,
+    Message,
+    Runtime,
+)
 from tractor import future
 
 

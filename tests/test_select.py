@@ -1,7 +1,7 @@
 import asyncio
 from asyncio import Future
 
-from tractor.select import first, select, Sel0, Sel1
+from tractor import Sel0, Sel1, first, select
 
 
 async def test_select_returns_the_completed_branch():
