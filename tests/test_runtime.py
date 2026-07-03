@@ -164,6 +164,55 @@ async def test_stop_resolves_pending_ask_with_stopped_error():
         await pending
 
 
+async def test_stop_mid_dispatch_resolves_ask_with_stopped_error():
+    started = asyncio.Event()
+
+    @final
+    class Parker(Actor):
+        """Parks inside its handler and never returns."""
+
+        @staticmethod
+        async def park() -> None:
+            started.set()
+            _ = await asyncio.Event().wait()  # never set
+
+    @final
+    @dataclass
+    class Park(Message[Parker, None]):
+        @override
+        async def dispatch(self, actor: Parker, ctx: Context[Parker]) -> None:
+            await actor.park()
+
+    runtime = Runtime()
+    ref = runtime.spawn(Parker())
+
+    pending = asyncio.ensure_future(runtime.ask(ref, Park()))
+    async with asyncio.timeout(1):
+        _ = await started.wait()  # the ask is in flight, not merely queued
+
+    # Stopping cancels the driver mid-dispatch; the caller must see a clean
+    # ActorStoppedError, not the driver's CancelledError.
+    await ref.stop()
+
+    with pytest.raises(ActorStoppedError):
+        await pending
+
+
+async def test_send_after_stop_raises_stopped_error():
+    runtime = Runtime()
+    ref = runtime.spawn(Echo())
+    await ref.stop()
+
+    with pytest.raises(ActorStoppedError):
+        _ = await runtime.ask(ref, EchoMsg(1))
+    with pytest.raises(ActorStoppedError):
+        await runtime.tell(ref, EchoMsg(2))
+    with pytest.raises(ActorStoppedError):
+        _ = runtime.try_ask(ref, EchoMsg(3))
+    with pytest.raises(ActorStoppedError):
+        runtime.try_tell(ref, EchoMsg(4))
+
+
 async def test_on_panic_continue_keeps_running():
     actor = Crasher(flow=ControlFlow.Continue)
     runtime = Runtime()

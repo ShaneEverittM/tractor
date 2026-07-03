@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from asyncio import Future
+from asyncio import CancelledError, Future
 from collections.abc import Awaitable, Callable
 from typing import Generic, Self, TypeVar, cast, final, TYPE_CHECKING
 
@@ -180,6 +180,14 @@ class Responder(Generic[A, R]):
         """
         try:
             response = await self._message.dispatch(actor, ctx)
+        except CancelledError:
+            # The driver is being cancelled (`ActorRef.stop`) mid-dispatch. To
+            # the caller that means "the actor stopped", so resolve the reply
+            # with `ActorStoppedError` rather than transferring the
+            # cancellation onto their task; the raise still hands the
+            # `CancelledError` back to the driver for its own teardown.
+            self.set_stopped()
+            raise
         except BaseException as exc:
             if self._reply is not None and not self._reply.done():
                 self._reply.set_exception(exc)
