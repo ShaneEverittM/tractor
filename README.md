@@ -49,8 +49,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import override
 
-from tractor import Actor, Message, Runtime
-from tractor.message import Context
+from tractor import Actor, Context, Message, Runtime
 
 
 class Counter(Actor):

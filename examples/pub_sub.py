@@ -13,9 +13,18 @@ import asyncio
 from dataclasses import dataclass
 from typing import final, override
 
-from tractor import Actor, InboxHandle, Message, ResponderHandle, Runtime, TellSender
-from tractor.message import Context
-from tractor.select import Sel0, Sel1, select
+from tractor import (
+    Actor,
+    Context,
+    InboxHandle,
+    Message,
+    ResponderHandle,
+    Runtime,
+    Sel0,
+    Sel1,
+    TellSender,
+    select,
+)
 
 
 # ---------------------------------------------------------------------------

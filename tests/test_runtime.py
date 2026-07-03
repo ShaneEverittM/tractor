@@ -4,8 +4,15 @@ from typing import final, override
 
 import pytest
 
-from tractor import Actor, ActorRef, ActorStoppedError, ControlFlow, Message, Runtime
-from tractor.message import Context
+from tractor import (
+    Actor,
+    ActorRef,
+    ActorStoppedError,
+    Context,
+    ControlFlow,
+    Message,
+    Runtime,
+)
 from tractor import future
 
 
@@ -211,6 +218,35 @@ async def test_send_after_stop_raises_stopped_error():
         _ = runtime.try_ask(ref, EchoMsg(3))
     with pytest.raises(ActorStoppedError):
         runtime.try_tell(ref, EchoMsg(4))
+
+
+async def test_on_start_panic_is_terminal_despite_continue():
+    @final
+    class FailsToStart(Actor):
+        def __init__(self):
+            self.panics = 0
+            self.stopped = False
+
+        @override
+        async def on_start(self):
+            raise ValueError("bad start")
+
+        @override
+        async def on_panic(self, exc: BaseException) -> ControlFlow:
+            self.panics += 1
+            return ControlFlow.Continue  # ignored: startup panics are terminal
+
+        @override
+        async def on_stop(self):
+            self.stopped = True
+
+    actor = FailsToStart()
+    runtime = Runtime()
+    ref = runtime.spawn(actor)
+    async with asyncio.timeout(1):
+        await ref._task  # pyright: ignore[reportPrivateUsage]
+    assert actor.panics == 1
+    assert actor.stopped
 
 
 async def test_on_panic_continue_keeps_running():

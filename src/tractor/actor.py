@@ -22,12 +22,16 @@ class Actor:
 
     async def on_panic(self, _exc: BaseException, /) -> ControlFlow:
         """
-        Called when an exception escapes from `step()` or `handle.respond()`.
+        Called when an exception escapes from `on_start()`, `step()`, or
+        `handle.respond()`.
 
         Return `ControlFlow.Stop` (the default) to terminate the actor, or
-        `ControlFlow.Continue` to swallow the error and keep running. The
-        runtime's crash policy observer is called unconditionally regardless of
-        the value returned here.
+        `ControlFlow.Continue` to swallow the error and keep running — except
+        for an `on_start` panic, which is always terminal: a `Continue`
+        returned there is ignored, since there is no running state to
+        continue into (`on_stop` still runs). The runtime's crash policy
+        observer is called unconditionally regardless of the value returned
+        here.
         """
         return ControlFlow.Stop
 

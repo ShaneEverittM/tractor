@@ -1,24 +1,47 @@
-"""A simple, modern, type-safe actor framework for asynchronous, fault-tolerant systems."""
+"""A simple, modern, type-safe actor framework for asynchronous, fault-tolerant systems.
+
+Everything a typical application touches is re-exported here. Two pieces are
+deliberately left namespaced rather than flattened into this module:
+
+- `tractor.oneshot` — its `Sender`/`Receiver` are channel ends, which would
+  collide with the message-sending `Sender`/`TellSender`; use it as
+  `oneshot.channel(T)` (mirroring `tokio::sync::oneshot`).
+- `tractor.actors` — the toolbox of ready-made actors (`WorkerPool`, ...),
+  imported explicitly by the applications that want them.
+"""
 
 from tractor.actor import Actor
-from tractor.control_flow import ControlFlow, CrashPolicy
+from tractor.control_flow import ControlFlow, CrashPolicy, LogCrashPolicy
 from tractor.errors import ActorStoppedError
 from tractor.handles import InboxHandle, ResponderHandle
-from tractor.message import Message, Responder, Sender, TellSender
+from tractor.message import Context, Message, Responder, Sender, TellSender
+from tractor.protocols import MessagePort
 from tractor.ref import ActorRef
 from tractor.runtime import Runtime
+from tractor.select import Sel0, Sel1, Sel2, Sel3, Sel4, Sel5, first, select
 
 __all__ = [
     "Actor",
     "ActorRef",
     "ActorStoppedError",
+    "Context",
     "ControlFlow",
     "CrashPolicy",
     "InboxHandle",
+    "LogCrashPolicy",
     "Message",
+    "MessagePort",
     "Responder",
     "ResponderHandle",
     "Runtime",
+    "Sel0",
+    "Sel1",
+    "Sel2",
+    "Sel3",
+    "Sel4",
+    "Sel5",
     "Sender",
     "TellSender",
+    "first",
+    "select",
 ]

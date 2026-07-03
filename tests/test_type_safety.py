@@ -1,6 +1,5 @@
 from typing import override
-from tractor import Actor, ActorRef, Message, Runtime
-from tractor.message import Context
+from tractor import Actor, ActorRef, Context, Message, Runtime
 
 
 class ActorOne(Actor):
