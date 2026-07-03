@@ -105,6 +105,29 @@ if __name__ == "__main__":
   address it.
 - **`CrashPolicy`** — observer invoked after every panic (defaults to logging).
 
+## Design notes
+
+tractor borrows its shape from two places: [kameo](https://github.com/tqwewe/kameo),
+a typed Rust actor library on tokio, which informs the `Actor` lifecycle
+(`on_start` / `on_stop` / `on_panic`) and the typed `ask`/`tell` surface; and an
+internal Rust actor runtime, which informs the explicit `Runtime` that every
+message passes through.
+
+One deliberate inversion from kameo: Rust declares message handling on the
+*actor* (`impl Message<M> for A`, with an associated reply type); tractor
+declares it on the *message* (`Message[A, R].dispatch`). Python has no trait
+impls, so the message is the one place the actor/reply relationship can be
+stated once and checked everywhere. The trade-off is generic bounds: where Rust
+can constrain "any actor handling `M1` and `M2`", tractor spells the
+single-message case with `Sender[M, R]` (kameo's `Recipient<M>`) or a signature
+generic over `A` shared by `ActorRef[A]` and `Message[A, R]`, and multi-message
+capabilities with a common `Actor` base class.
+
+This design is also why tractor requires **Python 3.14+**: typed messages lean
+on PEP 695 class-scoped generics, `@override`, `Self`, and strict variance
+checking — the pieces that make a statically-typed actor protocol expressible
+in Python at all.
+
 ## Examples
 
 See [`examples/`](examples/) for a runnable pub/sub demo covering fanout,
