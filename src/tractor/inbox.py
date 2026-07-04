@@ -6,11 +6,11 @@ from typing import final, override
 
 from tractor.actor import Actor
 from tractor.errors import ActorStoppedError
-from tractor.message import Message, Responder
+from tractor.message import AnyResponder, Message, Responder
 
 
 @final
-class Inbox[A: Actor](Queue[Responder[A, object]]):
+class Inbox(Queue[AnyResponder]):
     """
     The inbox of an `Actor`.
 
@@ -35,7 +35,7 @@ class Inbox[A: Actor](Queue[Responder[A, object]]):
         super().__init__(maxsize=capacity if capacity is not None else 0)
 
     @override
-    async def put(self, item: Responder[A, object]) -> None:
+    async def put(self, item: AnyResponder) -> None:
         """
         Enqueue `item`, waiting for capacity.
 
@@ -47,7 +47,7 @@ class Inbox[A: Actor](Queue[Responder[A, object]]):
             raise ActorStoppedError() from None
 
     @override
-    def put_nowait(self, item: Responder[A, object]) -> None:
+    def put_nowait(self, item: AnyResponder) -> None:
         """
         Enqueue `item` if capacity is available now.
 
@@ -59,7 +59,7 @@ class Inbox[A: Actor](Queue[Responder[A, object]]):
         except asyncio.QueueShutDown:
             raise ActorStoppedError() from None
 
-    async def ask[R](self, message: Message[A, R]) -> Future[R]:
+    async def ask[A: Actor, R](self, message: Message[A, R]) -> Future[R]:
         """
         Enqueue a message, waiting for capacity and its reply.
 
@@ -71,7 +71,7 @@ class Inbox[A: Actor](Queue[Responder[A, object]]):
         await self.put(responder)
         return handle
 
-    def try_ask[R](self, message: Message[A, R]) -> Future[R]:
+    def try_ask[A: Actor, R](self, message: Message[A, R]) -> Future[R]:
         """
         Try to enqueue a message, then wait for its reply.
 
@@ -84,7 +84,7 @@ class Inbox[A: Actor](Queue[Responder[A, object]]):
         self.put_nowait(responder)
         return reply
 
-    async def tell[R](self, message: Message[A, R]) -> None:
+    async def tell[A: Actor, R](self, message: Message[A, R]) -> None:
         """
         Enqueue a message, waiting for capacity.
 
@@ -94,7 +94,7 @@ class Inbox[A: Actor](Queue[Responder[A, object]]):
         responder = Responder(message).tell()
         await self.put(responder)
 
-    def try_tell[R](self, message: Message[A, R]) -> None:
+    def try_tell[A: Actor, R](self, message: Message[A, R]) -> None:
         """
         Try to enqueue a message.
 

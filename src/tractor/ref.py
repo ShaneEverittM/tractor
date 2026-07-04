@@ -5,13 +5,13 @@ from __future__ import annotations
 import asyncio
 from asyncio import CancelledError
 from contextlib import suppress
-from typing import TYPE_CHECKING, final
+from typing import TYPE_CHECKING, cast, final
 
 from tractor.actor import Actor
 from tractor.control_flow import ControlFlow
 from tractor.handles import InboxHandle, ResponderHandle
 from tractor.inbox import Inbox
-from tractor.message import Context
+from tractor.message import Context, Responder
 
 if TYPE_CHECKING:
     from tractor.protocols import RuntimeLike
@@ -46,9 +46,13 @@ class ActorRef[A: Actor]:
         :param runtime: the runtime to use; defaults to the module-level singleton
         """
         self._actor = actor
-        self._inbox = Inbox[A](capacity)
+        self._inbox = Inbox(capacity)
         self._runtime: RuntimeLike = runtime
         self._task = asyncio.create_task(self._driver())
+
+    @property
+    def runtime(self) -> RuntimeLike:
+        return self._runtime
 
     async def _driver(self) -> None:
         try:
@@ -99,7 +103,9 @@ class ActorRef[A: Actor]:
 
     async def _recv(self) -> ResponderHandle:
         """Receive the next message, bound to this actor and a fresh context."""
-        responder = await self._inbox.get()
+        # Re-constitue AnyResponder to a Responder to this actor. We know this
+        # is true, since we only put responders for this actor in this inbox.
+        responder = cast(Responder[A, object], await self._inbox.get())
         return ResponderHandle(lambda: responder.respond(self._actor, Context(self)))
 
     async def stop(self) -> None:
@@ -109,6 +115,13 @@ class ActorRef[A: Actor]:
         # coroutine body entirely — on_start and on_stop would never run.
         await asyncio.sleep(0)
         _ = self._task.cancel()
+        with suppress(CancelledError):
+            await self._task
+        self._inbox.shutdown()
+        self._inbox.drain()  # resolve any messages enqueued in the race window
+
+    async def join(self) -> None:
+        """Wait for this actor to terminate on its own."""
         with suppress(CancelledError):
             await self._task
         self._inbox.shutdown()

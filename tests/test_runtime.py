@@ -37,6 +37,12 @@ class EchoMsg(Message[Echo, int]):
         return await actor.echo(self.value)
 
 
+class NoopMessage(Message[Actor, None]):
+    @override
+    async def dispatch(self, actor: Actor, ctx: Context[Actor]):
+        return
+
+
 @final
 class Crasher(Actor):
     """Actor whose dispatch always raises."""
@@ -127,7 +133,7 @@ async def test_on_stop_called_after_crash():
     runtime.try_tell(ref, Boom())
     # Wait for the driver task to finish after the panic
     async with asyncio.timeout(1):
-        await ref._task  # pyright: ignore[reportPrivateUsage]
+        await ref.join()
     assert actor.stopped
 
 
@@ -158,9 +164,7 @@ async def test_stop_resolves_pending_ask_with_stopped_error():
     ref = runtime.spawn(Blocker())
 
     # Enqueue an ask before the actor ever starts processing messages
-    pending = asyncio.ensure_future(
-        runtime.ask(ref, EchoMsg(1))  # pyright: ignore[reportArgumentType]
-    )
+    pending = asyncio.ensure_future(runtime.ask(ref, NoopMessage()))
 
     # Give the event loop a turn so the enqueue attempt can proceed
     await asyncio.sleep(0)
@@ -245,7 +249,7 @@ async def test_on_start_panic_is_terminal_despite_continue():
     runtime = Runtime()
     ref = runtime.spawn(actor)
     async with asyncio.timeout(1):
-        await ref._task  # pyright: ignore[reportPrivateUsage]
+        await ref.join()
     assert actor.panics == 1
     assert actor.stopped
 
@@ -287,7 +291,7 @@ async def test_crash_policy_called():
         await runtime.ask(ref, Boom())
 
     async with asyncio.timeout(1):
-        await ref._task  # pyright: ignore[reportPrivateUsage]
+        await ref.join()
 
     assert len(policy.calls) == 1
     _, exc, flow = policy.calls[0]
@@ -674,3 +678,34 @@ async def test_senders_built_from_context():
 
     await relay_ref.stop()
     await echo_ref.stop()
+
+
+async def test_context_spawn_coherence():
+    @final
+    class JohnStamos(Actor):
+        def __init__(self) -> None:
+            self._milly: ActorRef[MillyAlcock] | None = None
+
+        @override
+        async def on_stop(self):
+            if milly := self._milly:
+                await milly.stop()
+
+        def chaperone(self, milly: ActorRef[MillyAlcock]):
+            self._milly = milly
+
+    class Hello(Message[JohnStamos, None]):
+        @override
+        async def dispatch(self, actor: JohnStamos, ctx: Context[JohnStamos]):
+            actor.chaperone(ctx.spawn(MillyAlcock()))
+
+    @final
+    class MillyAlcock(Actor):
+        pass
+
+    async with Runtime() as rt:
+        john = JohnStamos()
+        john_ref = rt.spawn(john)
+        await rt.ask(john_ref, Hello())
+
+        assert len(rt) == 2
