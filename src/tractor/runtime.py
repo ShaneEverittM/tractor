@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from asyncio import Future
-from typing import TYPE_CHECKING, override
+from asyncio import CancelledError, Event, Future
+from collections.abc import Sized
+from contextlib import AbstractAsyncContextManager, suppress
+from types import TracebackType
+from typing import TYPE_CHECKING, Self, override
 
 from tractor.control_flow import ControlFlow, CrashPolicy, LogCrashPolicy
 from tractor.protocols import RuntimeLike
@@ -14,7 +17,14 @@ if TYPE_CHECKING:
     from tractor.ref import ActorRef
 
 
-class Runtime(RuntimeLike):
+class RuntimeClosedError(Exception):
+    """Raised when ``Runtime.spawn`` is invoked during Runtime shutdown."""
+
+    def __init__(self):
+        super().__init__("Attempted to spawn actor during runtime shutdown")
+
+
+class Runtime(RuntimeLike, AbstractAsyncContextManager["Runtime", None], Sized):
     """
     The top-level orchestration object.
 
@@ -36,7 +46,10 @@ class Runtime(RuntimeLike):
 
     def __init__(self, crash_policy: CrashPolicy | None = None) -> None:
         self._crash_policy: CrashPolicy = crash_policy or LogCrashPolicy()
+        self._actors: dict[ActorRef[Actor], None] = {}
+        self._shutting_down: Event = Event()
 
+    @override
     def spawn[A: Actor](
         self,
         actor: A,
@@ -49,10 +62,16 @@ class Runtime(RuntimeLike):
         :param actor: the actor instance to wrap and start
         :param capacity: inbox capacity (`None` for unbounded)
         :return: an `ActorRef` through which messages can be addressed
+        :raises `RuntimeShutdownError: if called during runtime shutdown
         """
         from tractor.ref import ActorRef  # deferred: breaks ref ↔ runtime cycle
 
-        return ActorRef(actor, capacity=capacity, runtime=self)
+        if self._shutting_down.is_set():
+            raise RuntimeClosedError()
+
+        ref = ActorRef(actor, capacity=capacity, runtime=self)
+        self._actors[ref] = None
+        return ref
 
     @override
     async def ask[A: Actor, R](
@@ -132,6 +151,34 @@ class Runtime(RuntimeLike):
     ) -> None:
         """Called by the driver unconditionally after every panic."""
         self._crash_policy.on_crash(actor, exc, flow)
+
+    @override
+    async def __aenter__(self) -> Self:
+        return self
+
+    @override
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+        /,
+    ) -> None:
+        await self.stop()
+
+    async def stop(self):
+        """Stop the runtime by stopping all actors"""
+        self._shutting_down.set()
+        for actor in reversed(self._actors):
+            with suppress(CancelledError):
+                await actor.stop()
+
+    def count(self) -> int:
+        return len(self._actors)
+
+    @override
+    def __len__(self) -> int:
+        return self.count()
 
 
 __all__ = ["Runtime"]

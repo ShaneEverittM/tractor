@@ -1,6 +1,6 @@
 from typing import override
 
-from tractor import Actor, Context, Message, Runtime
+from tractor import Actor, ActorRef, Context, Message, Runtime
 
 
 class ActorOne(Actor):
@@ -51,3 +51,49 @@ async def test_type_safety() -> None:
 
     await actor1.stop()
     await actor2.stop()
+
+
+class ChildOfOne(ActorOne):
+    pass
+
+
+class MessageForChild(Message[ChildOfOne, str]):
+    @override
+    async def dispatch(self, actor: ChildOfOne, ctx: Context[ChildOfOne]) -> str:
+        return "child"
+
+
+# The variance of the public generics is part of the shipped API: it is
+# *inferred* by the type checker from the class bodies, so an innocent new
+# member could silently flip it and break downstream code without any error
+# in this repo. These assignments pin the contract; the ignored lines pin
+# the unsound directions (same unnecessary-ignore trick as above).
+async def test_variance_contract() -> None:
+    runtime = Runtime()
+    child = runtime.spawn(ChildOfOne())
+
+    # ActorRef is covariant: a ref to a subtype is a ref to the supertype...
+    base_ref: ActorRef[ActorOne] = child
+    # ...and messages targeting the supertype reach the actual subtype actor.
+    r: int = await runtime.ask(base_ref, MessageForActorOne())
+    assert r == 42
+
+    # Message is contravariant: a supertype-targeted message serves a subtype.
+    _narrowed_msg: Message[ChildOfOne, int] = MessageForActorOne()
+
+    # But never the unsound directions.
+    bad_ref: ActorRef[ChildOfOne] = runtime.spawn(ActorOne())  # pyright: ignore[reportAssignmentType]
+    _bad_msg: Message[ActorOne, str] = MessageForChild()  # pyright: ignore[reportAssignmentType]
+
+    await bad_ref.stop()
+    await child.stop()
+
+
+# Context is covariant.
+async def test_context_covariance_contract() -> None:
+    runtime = Runtime()
+    child = runtime.spawn(ChildOfOne())
+
+    _base_ctx: Context[ActorOne] = Context(child)
+
+    await child.stop()

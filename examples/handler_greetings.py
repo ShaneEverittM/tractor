@@ -48,12 +48,11 @@ class Announce(Message[Listener, None]):
 
 @main
 async def app(rt: Runtime) -> None:
-    alice = rt.spawn(Listener("Alice"))
+    async with rt:
+        alice = rt.spawn(Listener("Alice"))
 
-    await rt.tell(alice, Announce("hello, hand-written message"))
+        await rt.tell(alice, Announce("hello, hand-written message"))
 
-    # 2. No message type at all: `@handler` synthesizes the envelope.
-    events = await rt.ask(alice, Listener.snapshot())
-    print(f"snapshot: {events}")
-
-    await alice.stop()
+        # 2. No message type at all: `@handler` synthesizes the envelope.
+        events = await rt.ask(alice, Listener.snapshot())
+        print(f"snapshot: {events}")

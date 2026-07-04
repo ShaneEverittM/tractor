@@ -70,5 +70,13 @@ class RuntimeLike(MessagePort, ABC):
         self, ref: ActorRef[A], message: Message[A, R]
     ) -> Future[R]: ...
 
+    @abstractmethod
+    def spawn[A: Actor](
+        self,
+        actor: A,
+        *,
+        capacity: int | None = None,
+    ) -> ActorRef[A]: ...
+
 
 __all__ = ["MessagePort", "RuntimeLike"]

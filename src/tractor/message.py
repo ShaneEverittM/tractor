@@ -1,11 +1,11 @@
 from abc import ABC, abstractmethod
 from asyncio import CancelledError, Future
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Generic, Self, TypeVar, cast, final, override
+from typing import TYPE_CHECKING, Generic, Never, Self, TypeVar, cast, final, override
 
 from tractor.actor import Actor
 from tractor.errors import ActorStoppedError
-from tractor.protocols import MessagePort
+from tractor.protocols import MessagePort, RuntimeLike
 
 if TYPE_CHECKING:
     from tractor.ref import ActorRef
@@ -104,6 +104,10 @@ class Context[A: Actor](MessagePort):
         """
         return cast(R, _Forward(target, message))
 
+    @property
+    def runtime(self) -> RuntimeLike:
+        return self._actor.runtime
+
     async def _forward[B: Actor, R](
         self, fwd: _Forward[B, R], reply: Future[R] | None
     ) -> None:
@@ -113,13 +117,12 @@ class Context[A: Actor](MessagePort):
         links the target's reply future into the original caller's `reply`.
         Invoked by `Responder.respond`; not part of the public handler API.
         """
-        runtime = self._actor._runtime  # pyright: ignore[reportPrivateUsage]
         if reply is None:
             # The original ask was a tell: just deliver the forwarded message.
-            await runtime.tell(fwd._target, fwd._message)  # pyright: ignore[reportPrivateUsage]
+            await self.runtime.tell(fwd.target, fwd.message)
             return
         try:
-            source = await runtime.forward(fwd._target, fwd._message)  # pyright: ignore[reportPrivateUsage]
+            source = await self.runtime.forward(fwd.target, fwd.message)
         except BaseException as exc:
             # Forwarding to a stopped/full target must not crash this actor; the
             # original caller sees the failure instead.
@@ -127,6 +130,14 @@ class Context[A: Actor](MessagePort):
                 reply.set_exception(exc)
             return
         _link_reply(source, reply)
+
+    def spawn[B: Actor](
+        self,
+        actor: B,
+        *,
+        capacity: int | None = None,
+    ) -> ActorRef[B]:
+        return self.runtime.spawn(actor, capacity=capacity)
 
 
 class Message[A: Actor, R](ABC):
@@ -178,7 +189,7 @@ class Message[A: Actor, R](ABC):
         return Responder(self)
 
 
-A = TypeVar("A", bound=Actor)
+A = TypeVar("A", bound=Actor, contravariant=True)
 R = TypeVar("R", covariant=True)
 
 
@@ -265,7 +276,7 @@ class Responder(Generic[A, R]):
 
 
 @final
-class _Forward(Generic[A, R]):
+class _Forward[A: Actor, R]:
     """
     An opaque directive returned from a handler to delegate its reply.
 
@@ -273,11 +284,15 @@ class _Forward(Generic[A, R]):
     constructs one (cast to the reply type `R`); `Responder.respond`
     recognizes it and routes the handoff through `Context._forward`. Users
     never construct or name this type directly.
+
+    Deliberately *not* sharing `Responder`'s contravariant `A`: the public
+    `target`/`message` attributes put `A` in positions where contravariance
+    would be unsound, and only invariance (inferred here) is honest.
     """
 
     def __init__(self, target: ActorRef[A], message: Message[A, R]):
-        self._target = target
-        self._message = message
+        self.target = target
+        self.message = message
 
 
 def _link_reply[T](source: Future[T], reply: Future[T]) -> None:
@@ -298,4 +313,15 @@ def _link_reply[T](source: Future[T], reply: Future[T]) -> None:
     source.add_done_callback(_on_done)
 
 
-__all__ = ["Message", "Responder", "Sender", "TellSender", "Context"]
+type AnyResponder = Responder[Never, object]
+"""
+The maximally permissive Responder type.
+
+Since A is contravariant and R is covariant, erasing each to its
+"accepts everything" extreme means the *bottom* of the hierarchy (`Never`)
+for A and the *top* (`object`) for R; every concrete `Responder[A, R]` is
+assignable to this.
+"""
+
+
+__all__ = ["AnyResponder", "Message", "Responder", "Sender", "TellSender", "Context"]
