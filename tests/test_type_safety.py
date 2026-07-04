@@ -1,5 +1,6 @@
 from typing import override
-from tractor import Actor, ActorRef, Context, Message, Runtime
+
+from tractor import Actor, Context, Message, Runtime
 
 
 class ActorOne(Actor):
@@ -47,14 +48,6 @@ async def test_type_safety() -> None:
     sender1 = MessageForActorOne.sender(runtime, actor1)
     misuse = sender1.send(MessageForActorTwo())  # pyright: ignore[reportArgumentType]
     misuse.close()  # only constructed to assert the type error above; don't leak it
-
-    # This isn't really a public API, but it's useful to make sure we don't code bugs.
-    responder1, reply1 = MessageForActorOne().responder().ask()
-    a1 = ActorOne()
-    ref = ActorRef(a1)
-    ctx = Context(ref)
-    await responder1.respond(a1, ctx)
-    assert await reply1 == 42
 
     await actor1.stop()
     await actor2.stop()

@@ -16,18 +16,6 @@ from tractor.message import Context
 if TYPE_CHECKING:
     from tractor.protocols import RuntimeLike
 
-_default_runtime: RuntimeLike | None = None
-
-
-def _get_default_runtime() -> RuntimeLike:
-    """Return the module-level default runtime, creating it on first access."""
-    global _default_runtime
-    if _default_runtime is None:
-        from tractor.runtime import Runtime
-
-        _default_runtime = Runtime()
-    return _default_runtime
-
 
 @final
 class ActorRef[A: Actor]:
@@ -43,9 +31,9 @@ class ActorRef[A: Actor]:
     def __init__(
         self,
         actor: A,
+        runtime: RuntimeLike,
         *,
         capacity: int | None = None,
-        runtime: RuntimeLike | None = None,
     ):
         """
         Wrap an actor in an `ActorRef`.
@@ -57,8 +45,6 @@ class ActorRef[A: Actor]:
         :param capacity: inbox capacity (`None` for unbounded)
         :param runtime: the runtime to use; defaults to the module-level singleton
         """
-        if runtime is None:
-            runtime = _get_default_runtime()
         self._actor = actor
         self._inbox = Inbox[A](capacity)
         self._runtime: RuntimeLike = runtime

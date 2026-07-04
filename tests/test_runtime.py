@@ -12,9 +12,8 @@ from tractor import (
     ControlFlow,
     Message,
     Runtime,
+    future,
 )
-from tractor import future
-
 
 # ---------------------------------------------------------------------------
 # Shared actors and messages
@@ -106,7 +105,8 @@ async def test_on_start_called():
         async def on_start(self):
             started.set()
 
-    ref = ActorRef(StartWatcher())
+    rt = Runtime()
+    ref = rt.spawn(StartWatcher())
     async with asyncio.timeout(1):
         _ = await started.wait()
     await ref.stop()
@@ -114,7 +114,8 @@ async def test_on_start_called():
 
 async def test_on_stop_called_after_stop():
     actor = Crasher()
-    ref = ActorRef(actor)
+    rt = Runtime()
+    ref = rt.spawn(actor)
     await ref.stop()
     assert actor.stopped
 
@@ -673,14 +674,3 @@ async def test_senders_built_from_context():
 
     await relay_ref.stop()
     await echo_ref.stop()
-
-
-async def test_default_runtime_backward_compat():
-    """ActorRef(actor) without a runtime argument still works."""
-    from tractor.ref import _get_default_runtime  # pyright: ignore[reportPrivateUsage]
-
-    ref = ActorRef(Echo())
-    runtime = _get_default_runtime()
-    result = await runtime.ask(ref, EchoMsg(5))
-    assert result == 5
-    await ref.stop()
